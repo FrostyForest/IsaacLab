@@ -30,8 +30,8 @@ simulation_app = app_launcher.app
 import math
 import torch
 
-#import omni.isaac.lab.envs.mdp as mdp
-import omni.isaac.lab_tasks.manager_based.classic.cartpole.mdp as mdp
+import omni.isaac.lab.envs.mdp as mdp
+#import omni.isaac.lab_tasks.manager_based.classic.cartpole.mdp as mdp
 from omni.isaac.lab.envs import ManagerBasedEnv, ManagerBasedEnvCfg,ManagerBasedRLEnv,ManagerBasedRLEnvCfg
 from omni.isaac.lab.managers import EventTermCfg as EventTerm
 from omni.isaac.lab.managers import ObservationGroupCfg as ObsGroup
