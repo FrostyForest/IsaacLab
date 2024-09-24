@@ -17,7 +17,7 @@ from omni.isaac.lab.managers import TerminationTermCfg as DoneTerm
 from omni.isaac.lab.scene import InteractiveSceneCfg
 from omni.isaac.lab.utils import configclass
 
-import omni.isaac.lab_tasks.manager_based.classic.cartpole.mdp as mdp
+import omni.isaac.lab_tasks.manager_based.classic.carter.mdp as mdp
 
 ##
 # Pre-defined configs
@@ -34,25 +34,25 @@ from omni.isaac.lab_assets.carter import CARTER_CFG  # isort:skip
 class CarterSceneCfg(InteractiveSceneCfg):
     """Configuration for a cart-pole scene."""
 
-    # # ground plane
-    # ground = AssetBaseCfg(
-    #     prim_path="/World/ground",
-    #     spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
-    # )
+    # ground plane
+    ground = AssetBaseCfg(
+        prim_path="/World/ground",
+        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
+    )
 
     # cartpole
     robot: ArticulationCfg = CARTER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-    # # lights
-    # dome_light = AssetBaseCfg(
-    #     prim_path="/World/DomeLight",
-    #     spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
-    # )
-    # distant_light = AssetBaseCfg(
-    #     prim_path="/World/DistantLight",
-    #     spawn=sim_utils.DistantLightCfg(color=(0.9, 0.9, 0.9), intensity=2500.0),
-    #     init_state=AssetBaseCfg.InitialStateCfg(rot=(0.738, 0.477, 0.477, 0.0)),
-    # )
+    # lights
+    dome_light = AssetBaseCfg(
+        prim_path="/World/DomeLight",
+        spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
+    )
+    distant_light = AssetBaseCfg(
+        prim_path="/World/DistantLight",
+        spawn=sim_utils.DistantLightCfg(color=(0.9, 0.9, 0.9), intensity=2500.0),
+        init_state=AssetBaseCfg.InitialStateCfg(rot=(0.738, 0.477, 0.477, 0.0)),
+    )
 
 
 ##
@@ -175,11 +175,11 @@ class CurriculumCfg:
 
 
 @configclass
-class CartpoleEnvCfg(ManagerBasedRLEnvCfg):
+class CarterEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: CartpoleSceneCfg = CartpoleSceneCfg(num_envs=4096, env_spacing=4.0)
+    scene: CarterSceneCfg = CarterSceneCfg(num_envs=1, env_spacing=4.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

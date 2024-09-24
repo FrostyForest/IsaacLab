@@ -10,7 +10,7 @@ Cartpole balancing environment.
 import gymnasium as gym
 
 from . import agents
-from .cartpole_env_cfg import CartpoleEnvCfg
+from .carter_env_cfg import CarterEnvCfg
 
 ##
 # Register Gym environments.

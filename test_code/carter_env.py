@@ -62,8 +62,9 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        # joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
+        # joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        joint_vel = ObsTerm(func=mdp.joint_vel)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -77,16 +78,16 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events."""
 
-    # on startup
-    add_pole_mass = EventTerm(
-        func=mdp.randomize_rigid_body_mass,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=["pole"]),
-            "mass_distribution_params": (0.1, 0.5),
-            "operation": "add",
-        },
-    )
+    # # on startup
+    # add_pole_mass = EventTerm(
+    #     func=mdp.randomize_rigid_body_mass,
+    #     mode="startup",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=["pole"]),
+    #         "mass_distribution_params": (0.1, 0.5),
+    #         "operation": "add",
+    #     },
+    # )
 
     # on reset
     reset_left_wheel_position = EventTerm(
@@ -95,7 +96,7 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"]),
             "position_range": (-0 * math.pi, 0 * math.pi),
-            "velocity_range": (-0 * math.pi, 0 * math.pi),
+            "velocity_range": (0.8 * math.pi, 1 * math.pi),
         },
     )
 
@@ -107,7 +108,7 @@ class EventCfg:
             # "position_range": (-0.125 * math.pi, 0.125 * math.pi),
             # "velocity_range": (-0.01 * math.pi, 0.01 * math.pi),
             "position_range": (-0 * math.pi, 0 * math.pi),
-            "velocity_range": (-0 * math.pi, 0 * math.pi),
+            "velocity_range": (-1 * math.pi, -0.8 * math.pi),
         },
     )
 
@@ -143,7 +144,7 @@ class RewardsCfg:
     terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
     # (3) Primary task: keep pole upright
     pole_pos = RewTerm(
-        func=mdp.joint_pos_target_l2,
+        func=mdp.joint_vel_l1,
         weight=-1.0,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"]), "target": 0.0},
     )
@@ -190,12 +191,14 @@ def main():
                 print("-" * 80)
                 print("[INFO]: Resetting environment...")
             # sample random actions
-            if count % 100 == 0:
-                joint_efforts = torch.randn_like(env.action_manager.action)
+            # if count % 100 == 0:
+            #     #joint_efforts = torch.randn_like(env.action_manager.action)
+            #     joint_efforts = torch.tensor([[0.0,-0.0]])
             # step the environment
             obs, rew, terminated, truncated, info = env.step(joint_efforts)
             # print current orientation of pole
-            print("[Env 0]: Pole joint: ", obs["policy"][0][1].item())
+            print("[Env 0]: Pole joint: ", obs["policy"][0])
+            print(obs["policy"].shape)
             # update counter
             count += 1
 
