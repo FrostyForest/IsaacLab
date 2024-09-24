@@ -54,7 +54,7 @@ class ActionsCfg:
 
 @configclass
 class ObservationsCfg:
-    """Observation specifications for the environment."""
+    """Observati  on specifications for the environment."""
 
     @configclass
     class PolicyCfg(ObsGroup):
@@ -63,6 +63,7 @@ class ObservationsCfg:
         # observation terms (order preserved)
         joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+
 
         def __post_init__(self) -> None:
             self.enable_corruption = False

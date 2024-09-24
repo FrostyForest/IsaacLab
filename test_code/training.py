@@ -84,6 +84,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg, agent_cfg: dict):
     agent_cfg = process_sb3_cfg(agent_cfg)
     # read configurations about the agent-training
     policy_arch = agent_cfg.pop("policy")
+
     n_timesteps = agent_cfg.pop("n_timesteps")
 
     # create isaac environment
