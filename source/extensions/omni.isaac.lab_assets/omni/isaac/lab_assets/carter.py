@@ -25,6 +25,7 @@ CARTER_CFG = ArticulationCfg(
             sleep_threshold=0.005,
             stabilization_threshold=0.001,
         ),
+        mass_props=sim_utils.MassPropertiesCfg(mass=2),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.5), joint_pos={"left_wheel": 0.0, "right_wheel": 0.0,"rear_pivot": 0.0}
@@ -32,16 +33,20 @@ CARTER_CFG = ArticulationCfg(
     actuators={
         "left_wheel_actuator": ImplicitActuatorCfg(
             joint_names_expr=["left_wheel"],
-            effort_limit=400.0,
-            velocity_limit=100.0,
-            stiffness=0.0,
-            damping=0.0,
+            effort_limit=4000.0,
+            velocity_limit=1000.0,
+            stiffness=1.0,
+            damping=10000.0,
         ),
         "right_wheel_actuator": ImplicitActuatorCfg(
-            joint_names_expr=["right_wheel"], effort_limit=400.0, velocity_limit=100.0, stiffness=0.0, damping=0.0
+            joint_names_expr=["right_wheel"],
+            effort_limit=4000.0,
+            velocity_limit=1000.0,
+            stiffness=1.0,
+            damping=10000.0
         ),
         "rear_pivot_actuator": ImplicitActuatorCfg(
-            joint_names_expr=["rear_pivot"], effort_limit=400.0, velocity_limit=100.0, stiffness=0.0, damping=0.0
+            joint_names_expr=["rear_pivot"], effort_limit=4000.0, velocity_limit=1000.0, stiffness=1.0, damping=10000.0
         ),
     },
 )

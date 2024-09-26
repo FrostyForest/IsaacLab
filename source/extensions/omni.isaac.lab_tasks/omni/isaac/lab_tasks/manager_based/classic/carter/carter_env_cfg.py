@@ -6,7 +6,7 @@
 import math
 
 import omni.isaac.lab.sim as sim_utils
-from omni.isaac.lab.assets import ArticulationCfg, AssetBaseCfg
+from omni.isaac.lab.assets import ArticulationCfg, AssetBaseCfg,RigidObjectCfg
 from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
 from omni.isaac.lab.managers import EventTermCfg as EventTerm
 from omni.isaac.lab.managers import ObservationGroupCfg as ObsGroup
@@ -53,6 +53,20 @@ class CarterSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DistantLightCfg(color=(0.9, 0.9, 0.9), intensity=2500.0),
         init_state=AssetBaseCfg.InitialStateCfg(rot=(0.738, 0.477, 0.477, 0.0)),
     )
+
+    cube: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/cube",
+        spawn=sim_utils.CuboidCfg(size=(0.25,0.25,0.25),
+                                  rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+                                  mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                                  collision_props=sim_utils.CollisionPropertiesCfg(),
+                                  visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
+                                  ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0,2.0,1.0)),
+    )
+
+
+
 
 
 ##
@@ -117,6 +131,16 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
             "position_range": (-0.25 * math.pi, 0.25 * math.pi),
             "velocity_range": (-0.25 * math.pi, 0.25 * math.pi),
+        },
+    )
+
+    reset_cube_position = EventTerm(
+        func=mdp.reset_root_state_with_random_orientation,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("cube"),
+            "position_range": {"x": (-2, 2), "y": (-2, 2), "z": (0, 0)},
+            "velocity_range": {"x": (0, 0), "y": (0, 0), "z": (0, 0), "roll": (0, 0), "pitch": (0, 0), "yaw": (0, 0)},
         },
     )
 

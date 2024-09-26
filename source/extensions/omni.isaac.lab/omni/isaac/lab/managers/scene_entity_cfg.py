@@ -132,6 +132,7 @@ class SceneEntityCfg:
                     self.joint_ids = [self.joint_ids]
                 joint_ids, _ = entity.find_joints(self.joint_names, preserve_order=self.preserve_order)
                 joint_names = [entity.joint_names[i] for i in self.joint_ids]
+
                 if joint_ids != self.joint_ids or joint_names != self.joint_names:
                     raise ValueError(
                         "Both 'joint_names' and 'joint_ids' are specified, and are not consistent."

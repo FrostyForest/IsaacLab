@@ -72,7 +72,8 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=100.0)
+    #joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=100.0)
+    joint_position = mdp.RelativeJointPositionActionCfg(asset_name="robot", joint_names=["cart_to_pole"],scale=2.0)
 
 
 @configclass

@@ -40,7 +40,7 @@ from omni.isaac.lab.managers import RewardTermCfg as RewTerm
 from omni.isaac.lab.managers import TerminationTermCfg as DoneTerm
 from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.utils import configclass
-
+from omni.isaac.lab.assets import Articulation, RigidObject
 from omni.isaac.lab_tasks.manager_based.classic.carter.carter_env_cfg import CarterSceneCfg
 
 
@@ -48,7 +48,11 @@ from omni.isaac.lab_tasks.manager_based.classic.carter.carter_env_cfg import Car
 class ActionsCfg:
     """Action specifications for the environment."""
     #
-    #joint_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=5.0)
+    # joint_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=5.0)
+
+    # left_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=500.0)
+    # right_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=500.0)
+
     left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=1.0)
     right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=1.0)
 
@@ -64,7 +68,8 @@ class ObservationsCfg:
         # observation terms (order preserved)
         # joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
         # joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
-        joint_vel = ObsTerm(func=mdp.joint_vel)
+        #joint_vel = ObsTerm(func=mdp.joint_vel)
+        #joint_names = ObsTerm(func=mdp.joint_names)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -109,6 +114,16 @@ class EventCfg:
             # "velocity_range": (-0.01 * math.pi, 0.01 * math.pi),
             "position_range": (-0 * math.pi, 0 * math.pi),
             "velocity_range": (-1 * math.pi, -0.8 * math.pi),
+        },
+    )
+
+    reset_cube_position = EventTerm(
+        func=mdp.reset_root_state_with_random_orientation,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-2, 2), "y": (-2, 2), "z": (0.5, 1)},
+            "velocity_range": {"x": (0, 0), "y": (0, 0), "z": (0, 0), "roll": (0, 0), "pitch": (0, 0), "yaw": (0, 0)},
+            "asset_cfg": SceneEntityCfg("cube"),
         },
     )
 
@@ -179,28 +194,34 @@ def main():
     env_cfg.scene.num_envs = args_cli.num_envs
     # setup base environment
     env = ManagerBasedRLEnv(cfg=env_cfg)
-    joint_efforts = torch.randn_like(env.action_manager.action)
+    #joint_efforts = torch.randn_like(env.action_manager.action)
+    joint_efforts = torch.tensor([[-5.0, 5.0]])
     # simulate physics
     count = 0
     while simulation_app.is_running():
         with torch.inference_mode():
             # reset
-            if count % 30000 == 0:
+            if count % 300 == 0:
                 count = 0
                 env.reset()
                 print("-" * 80)
                 print("[INFO]: Resetting environment...")
             # sample random actions
-            # if count % 100 == 0:
-            #     #joint_efforts = torch.randn_like(env.action_manager.action)
-            #     joint_efforts = torch.tensor([[0.0,-0.0]])
+            if count % 100 == 0:
+                #joint_efforts = torch.randn_like(env.action_manager.action)
+                joint_efforts = torch.tensor([[-5.0,5.0]])
             # step the environment
             obs, rew, terminated, truncated, info = env.step(joint_efforts)
             # print current orientation of pole
             print("[Env 0]: Pole joint: ", obs["policy"][0])
-            print(obs["policy"].shape)
             # update counter
             count += 1
+
+            asset: Articulation = env.scene[SceneEntityCfg("robot").name]
+            cube : RigidObject =env.scene["cube"]
+            #print(asset.joint_names)
+            print(cube.data.root_state_w)
+
 
     # close the environment
     env.close()

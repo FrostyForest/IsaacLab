@@ -49,7 +49,9 @@ class ActionsCfg:
     """Action specifications for the environment."""
     #
     #joint_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=5.0)
-    joint_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=1.0)
+    #joint_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["cart_to_pole"], scale=5.0)
+    #joint_position = mdp.RelativeJointPositionActionCfg(asset_name="robot", joint_names=["cart_to_pole"],scale=20.0)
+    joint_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["cart_to_pole"], scale=50.0)
 
 
 @configclass
@@ -62,7 +64,8 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        #joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        joint_vel = ObsTerm(func=mdp.joint_vel)
 
 
         def __post_init__(self) -> None:
@@ -195,7 +198,7 @@ def main():
             # step the environment
             obs, rew, terminated, truncated, info = env.step(joint_efforts)
             # print current orientation of pole
-            print("[Env 0]: Pole joint: ", obs["policy"][0][1].item())
+            print("[Env 0]: Pole joint: ", obs["policy"][0][2].item())
             # update counter
             count += 1
 
