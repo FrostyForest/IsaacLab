@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 import omni.isaac.lab.utils.math as math_utils
 from omni.isaac.lab.assets import Articulation, RigidObject
 from omni.isaac.lab.managers import SceneEntityCfg
-from omni.isaac.lab.sensors import RayCaster
+from omni.isaac.lab.sensors import RayCaster,camera
 
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedEnv, ManagerBasedRLEnv
@@ -212,3 +212,10 @@ Commands.
 def generated_commands(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     """The generated command from command term in the command manager with the given name."""
     return env.command_manager.get_command(command_name)
+
+
+def camera_data(env: ManagerBasedRLEnv)-> torch.Tensor:
+
+    sensor: camera = env.scene.sensors["carter_camera_first_person"]
+    return sensor.data.output["rgb"]
+

@@ -16,7 +16,7 @@ from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.managers import TerminationTermCfg as DoneTerm
 from omni.isaac.lab.scene import InteractiveSceneCfg
 from omni.isaac.lab.utils import configclass
-
+from omni.isaac.lab.sensors import CameraCfg
 import omni.isaac.lab_tasks.manager_based.classic.carter.mdp as mdp
 
 ##
@@ -65,9 +65,17 @@ class CarterSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0,2.0,1.0)),
     )
 
-
-
-
+    carter_camera_first_person =  CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/chassis_link/camera_mount/carter_camera_first_person_test",
+        update_period=0.1,
+        height=480,
+        width=640,
+        data_types=["rgb", "distance_to_image_plane"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        ),
+        offset=CameraCfg.OffsetCfg(pos=(0.0892, 0.0, 0.3265), rot=(-0.5, -0.5, 0.5, 0.5), convention="opengl"),
+    )
 
 ##
 # MDP settings

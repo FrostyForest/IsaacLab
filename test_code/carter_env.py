@@ -70,6 +70,7 @@ class ObservationsCfg:
         # joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
         #joint_vel = ObsTerm(func=mdp.joint_vel)
         #joint_names = ObsTerm(func=mdp.joint_names)
+        camera = ObsTerm(func=mdp.camera_data)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -206,6 +207,7 @@ def main():
                 env.reset()
                 print("-" * 80)
                 print("[INFO]: Resetting environment...")
+
             # sample random actions
             if count % 100 == 0:
                 #joint_efforts = torch.randn_like(env.action_manager.action)
@@ -213,14 +215,18 @@ def main():
             # step the environment
             obs, rew, terminated, truncated, info = env.step(joint_efforts)
             # print current orientation of pole
+            #
             print("[Env 0]: Pole joint: ", obs["policy"][0])
             # update counter
             count += 1
 
             asset: Articulation = env.scene[SceneEntityCfg("robot").name]
             cube : RigidObject =env.scene["cube"]
+            camera = env.scene["carter_camera_first_person"]
             #print(asset.joint_names)
-            print(cube.data.root_state_w)
+            #print(cube.data.root_state_w)
+
+
 
 
     # close the environment
