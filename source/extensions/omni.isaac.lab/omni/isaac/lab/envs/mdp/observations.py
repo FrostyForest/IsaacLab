@@ -18,7 +18,7 @@ import omni.isaac.lab.utils.math as math_utils
 from omni.isaac.lab.assets import Articulation, RigidObject
 from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.sensors import RayCaster,camera
-
+import torch.nn.functional as F
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedEnv, ManagerBasedRLEnv
 
@@ -217,5 +217,7 @@ def generated_commands(env: ManagerBasedRLEnv, command_name: str) -> torch.Tenso
 def camera_data(env: ManagerBasedRLEnv)-> torch.Tensor:
 
     sensor: camera = env.scene.sensors["carter_camera_first_person"]
-    return sensor.data.output["rgb"]
+    data=sensor.data.output["rgb"]
+    output_tensor = F.interpolate(data.float().permute(0, 3, 1, 2), size=(120, 160), mode='bilinear', align_corners=False)
+    return output_tensor/255
 

@@ -262,7 +262,7 @@ def main():
             robot_world_pos = asset.data.root_pos_w
             cube_world_pos = cube.data.root_pos_w
             distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
-            print(distance0,distance)
+            print(distance)
             #print(env.action_space.shape)
 
 

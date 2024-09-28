@@ -156,3 +156,14 @@ def illegal_contact(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: SceneE
     return torch.any(
         torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids], dim=-1), dim=1)[0] > threshold, dim=1
     )
+
+def distance_in( env: ManagerBasedRLEnv)-> torch.Tensor:
+    asset: Articulation = env.scene[SceneEntityCfg("robot").name]
+    cube: RigidObject = env.scene["cube"]
+
+
+    robot_world_pos = asset.data.root_pos_w
+    cube_world_pos = cube.data.root_pos_w
+    distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
+
+    return torch.any(distance<0.4)

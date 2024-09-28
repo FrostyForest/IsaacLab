@@ -39,4 +39,4 @@ def distance_robot2cube(
     cube_world_pos = cube.data.root_pos_w
 
     distance=torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
-    return distance0
+    return (distance0-distance)/(distance0+0.3)

@@ -47,21 +47,21 @@ class CarterSceneCfg(InteractiveSceneCfg):
         prim_path="/World/DomeLight",
         spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
     )
-    distant_light = AssetBaseCfg(
-        prim_path="/World/DistantLight",
-        spawn=sim_utils.DistantLightCfg(color=(0.9, 0.9, 0.9), intensity=2500.0),
-        init_state=AssetBaseCfg.InitialStateCfg(rot=(0.738, 0.477, 0.477, 0.0)),
-    )
+    # distant_light = AssetBaseCfg(
+    #     prim_path="/World/DistantLight",
+    #     spawn=sim_utils.DistantLightCfg(color=(0.9, 0.9, 0.9), intensity=2500.0),
+    #     init_state=AssetBaseCfg.InitialStateCfg(rot=(0.738, 0.477, 0.477, 0.0)),
+    # )
 
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/cube",
-        spawn=sim_utils.CuboidCfg(size=(0.25,0.25,0.25),
+        spawn=sim_utils.CuboidCfg(size=(0.3,0.3,0.4),
                                   rigid_props=sim_utils.RigidBodyPropertiesCfg(),
                                   mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                                   collision_props=sim_utils.CollisionPropertiesCfg(),
                                   visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
                                   ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0,2.0,1.0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0,2.0,0.4)),
     )
 
     carter_camera_first_person =  CameraCfg(
@@ -86,8 +86,8 @@ class ActionsCfg:
     # left_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=500.0)
     # right_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=500.0)
 
-    left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=2.0)
-    right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=2.0)
+    left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=7)
+    right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=7)
 
 
 @configclass
@@ -151,20 +151,29 @@ class EventCfg:
     #     },
     # )
 
+    set_cube_root_state=EventTerm(
+        func=mdp.set_default_root_state,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-2, 2), "y": (-2, 2), "z": (0.05, 0.1)},
+            "asset_cfg": SceneEntityCfg("cube"),
+        },
+    )
+
     reset_scene = EventTerm(
         func=mdp.reset_scene_to_default,
         mode="reset",
     )
 
-    reset_cube_position = EventTerm(
-        func=mdp.reset_root_state_with_random_orientation,
-        mode="reset",
-        params={
-            "pose_range": {"x": (-2, 2), "y": (-2, 2), "z": (0.1, 0.2)},
-            "velocity_range": {"x": (0, 0), "y": (0, 0), "z": (0, 0), "roll": (0, 0), "pitch": (0, 0), "yaw": (0, 0)},
-            "asset_cfg": SceneEntityCfg("cube"),
-        },
-    )
+    # reset_cube_position = EventTerm(
+    #     func=mdp.reset_root_state_with_random_orientation,
+    #     mode="reset",
+    #     params={
+    #         "pose_range": {"x": (-2, 2), "y": (-2, 2), "z": (0.1, 0.2)},
+    #         "velocity_range": {"x": (0, 0), "y": (0, 0), "z": (0, 0), "roll": (0, 0), "pitch": (0, 0), "yaw": (0, 0)},
+    #         "asset_cfg": SceneEntityCfg("cube"),
+    #     },
+    # )
 
     # reset_carter_position = EventTerm(
     #     func=mdp.reset_root_state_with_random_orientation,
@@ -205,7 +214,7 @@ class RewardsCfg:
 
     distance = RewTerm(
         func=mdp.distance_robot2cube,
-        weight=-1,
+        weight=1,
     )
 
 
@@ -220,6 +229,7 @@ class TerminationsCfg:
     #     func=mdp.joint_pos_out_of_manual_limit,
     #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
     # )
+    too_close = DoneTerm(func=mdp.distance_in, time_out=True)
 
 
 @configclass
@@ -260,6 +270,6 @@ class CarterEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 5  # env step every 4 sim steps: 200Hz / 4 = 50Hz
         # simulation settings
         self.sim.dt = 0.01  # sim step every 5ms: 200Hz
-        self.episode_length_s = 8
+        self.episode_length_s = 30
         self.sim.render_interval = self.decimation
 

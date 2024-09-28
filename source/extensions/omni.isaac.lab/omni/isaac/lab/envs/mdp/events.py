@@ -888,3 +888,22 @@ def _randomize_prop_by_op(
         )
     return data
 
+def set_default_root_state(env: ManagerBasedEnv, env_ids: torch.Tensor,
+                           pose_range: dict[str, tuple[float, float]],
+                            asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),):
+    asset: RigidObject | Articulation = env.scene[asset_cfg.name]
+    # get default root state
+    root_states = asset.data.default_root_state[env_ids].clone()
+    robot_states= env.scene["robot"].data.default_root_state[env_ids].clone()
+
+    # poses
+    range_list = [pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z"]]
+    ranges = torch.tensor(range_list, device=asset.device)
+    rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 3), device=asset.device)
+
+    #positions = root_states[:, 0:3] + env.scene.env_origins[env_ids] + rand_samples
+    positions = robot_states[:, 0:3] + env.scene.env_origins[env_ids] + rand_samples
+    orientations = math_utils.random_orientation(len(env_ids), device=asset.device)
+
+    state=torch.cat([positions, orientations], dim=-1)
+    asset.data.default_root_state[env_ids,:7]=state

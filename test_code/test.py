@@ -1,15 +1,14 @@
+import torch
+import torch.nn.functional as F
+image_tensor = torch.randint(0, 256, size=(1, 224, 224,4), dtype=torch.uint8)
 
-import numpy as np
-import rclpy
-from rclpy.node import Node
-from image_server.image_server.server import  ImagePublisher
-import time
 
-rclpy.init()
-publisher = ImagePublisher()
+image_tensor_float = image_tensor.float().permute(0, 3, 1, 2)
 
-while 1:
-    numpy_image = np.random.randint(0, 255, size=(480, 640, 3), dtype=np.uint8)
-    publisher.publish_numpy_image(numpy_image)
-    time.sleep(1)
-    print('1')
+# 使用 interpolate 进行放缩
+resized_image_tensor = F.interpolate(image_tensor_float, size=(112, 112), mode='bilinear', align_corners=False)
+
+# 将张量转换回 torch.uint8 类型 (可选)
+resized_image_tensor_uint8 = resized_image_tensor.to(torch.uint8).permute(0,2,3,1)
+
+print(resized_image_tensor_uint8.shape)
