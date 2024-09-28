@@ -49,7 +49,6 @@ def main():
     print(f"[INFO]: Gym observation space: {env.observation_space}")
     print(f"[INFO]: Gym action space: {env.action_space}")
     actions = 2 * torch.randn(env.action_space.shape, device=env.unwrapped.device)
-    print(actions, env.action_space.shape)
     # reset environment
     env.reset()
     # simulate environment

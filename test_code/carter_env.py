@@ -256,15 +256,14 @@ def main():
             #print(asset.joint_names)
             print(cube.data.root_pos_w)
             print(asset.data.root_pos_w)
-            robot = env.scene[SceneEntityCfg("robot").name]
-            cube = env.scene[SceneEntityCfg("cube").name]
-
-            robot_world_pos = robot.data.root_pos_w
+            robot_world_pos_default = asset.data.default_root_state[:, :3]
+            cube_world_pos_default = cube.data.default_root_state[:, :3]
+            distance0 = torch.linalg.norm(robot_world_pos_default[:, :2] - cube_world_pos_default[:, :2])
+            robot_world_pos = asset.data.root_pos_w
             cube_world_pos = cube.data.root_pos_w
-
             distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
-            #print(distance,rew,rew.shape)
-            print(env.action_space.shape)
+            print(distance0,distance)
+            #print(env.action_space.shape)
 
 
 

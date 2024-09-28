@@ -1,21 +1,31 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml#L32
 seed: 42
 
+
+
+env_wrapper:
+  - rl_zoo3.wrappers.FrameSkip:
+      skip: 2
+  - gymnasium.wrappers.resize_observation.ResizeObservation:
+      shape: 128
+frame_stack: 2
 n_timesteps: !!float 1e6
-policy: 'MlpPolicy'
-n_steps: 16
-batch_size: 4096
-gae_lambda: 0.95
+policy: 'CnnPolicy'
+batch_size: 128
+n_steps: 256
 gamma: 0.99
-n_epochs: 20
-ent_coef: 0.01
-learning_rate: !!float 3e-4
-clip_range: !!float 0.2
-policy_kwargs: "dict(
-                  activation_fn=nn.ELU,
-                  net_arch=[32, 32],
-                  squash_output=False,
-                )"
-vf_coef: 1.0
+gae_lambda: 0.95
+n_epochs: 100
+ent_coef: 0.0
+sde_sample_freq: 4
+vf_coef: 0.5
+learning_rate: lin_1e-4
+use_sde: True
+clip_range: 0.2
+policy_kwargs: "dict(log_std_init=-2,
+                      ortho_init=False,
+                      activation_fn=nn.GELU,
+                      net_arch=dict(pi=[256], vf=[256]),
+                      )"
 max_grad_norm: 1.0
 device: "cuda:0"
