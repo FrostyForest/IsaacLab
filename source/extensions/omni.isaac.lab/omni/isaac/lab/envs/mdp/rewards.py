@@ -296,3 +296,15 @@ def track_ang_vel_z_exp(
     # compute the error
     ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_b[:, 2])
     return torch.exp(-ang_vel_error / std**2)
+
+def distance_robot2cube(
+    env: ManagerBasedRLEnv
+) -> torch.Tensor:
+    robot=env.scene["robot"]
+    cube=env.scene["cube"]
+
+    robot_world_pos=robot.data.root_pos_w
+    cube_world_pos = cube.data.root_pos_w
+
+    distance=torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
+    return distance

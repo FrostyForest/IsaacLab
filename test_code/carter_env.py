@@ -14,7 +14,7 @@ from omni.isaac.lab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Tutorial on creating a cartpole base environment.")
-parser.add_argument("--num_envs", type=int, default=16, help="Number of environments to spawn.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -30,8 +30,8 @@ simulation_app = app_launcher.app
 import math
 import torch
 
-import omni.isaac.lab.envs.mdp as mdp
-#import omni.isaac.lab_tasks.manager_based.classic.cartpole.mdp as mdp
+#import omni.isaac.lab.envs.mdp as mdp
+import omni.isaac.lab_tasks.manager_based.classic.carter.mdp as mdp
 from omni.isaac.lab.envs import ManagerBasedEnv, ManagerBasedEnvCfg,ManagerBasedRLEnv,ManagerBasedRLEnvCfg
 from omni.isaac.lab.managers import EventTermCfg as EventTerm
 from omni.isaac.lab.managers import ObservationGroupCfg as ObsGroup
@@ -41,9 +41,10 @@ from omni.isaac.lab.managers import TerminationTermCfg as DoneTerm
 from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.utils import configclass
 from omni.isaac.lab.assets import Articulation, RigidObject
+from omni.isaac.lab_tasks.manager_based.classic.carter.carter_env_cfg import CarterEnvCfg
 from omni.isaac.lab_tasks.manager_based.classic.carter.carter_env_cfg import CarterSceneCfg
 
-
+#
 @configclass
 class ActionsCfg:
     """Action specifications for the environment."""
@@ -53,8 +54,8 @@ class ActionsCfg:
     # left_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=500.0)
     # right_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=500.0)
 
-    left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=1.0)
-    right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=1.0)
+    left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=2.0)
+    right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=2.0)
 
 
 @configclass
@@ -128,54 +129,38 @@ class EventCfg:
         },
     )
 
-
-@configclass
-class CarterEnvCfg(ManagerBasedRLEnvCfg):
-    """Configuration for the cartpole environment."""
-
-    # Scene settings
-    scene = CarterSceneCfg(num_envs=1, env_spacing=2.5)
-    # Basic settings
-    observations = ObservationsCfg()
-    actions = ActionsCfg()
-    events = EventCfg()
-
-    def __post_init__(self):
-        """Post initialization."""
-        # viewer settings
-        self.viewer.eye = [4.5, 0.0, 6.0]
-        self.viewer.lookat = [0.0, 0.0, 2.0]
-        # step settings
-        self.decimation = 4  # env step every 4 sim steps: 200Hz / 4 = 50Hz
-        # simulation settings
-        self.sim.dt = 0.005  # sim step every 5ms: 200Hz
-
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # (1) Constant running reward
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
-    # (2) Failure penalty
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
-    # (3) Primary task: keep pole upright
-    pole_pos = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"]), "target": 0.0},
-    )
+    # # (1) Constant running reward
+    # alive = RewTerm(func=mdp.is_alive, weight=1.0)
+    # # (2) Failure penalty
+    # terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
+    # # (3) Primary task: keep pole upright
+    # pole_pos = RewTerm(
+    #     func=mdp.joint_vel_l1,
+    #     weight=-1.0,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"]), "target": 0.0},
+    # )
     # (4) Shaping tasks: lower cart velocity
-    cart_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.01,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"])},
+    # cart_vel = RewTerm(
+    #     func=mdp.joint_vel_l1,
+    #     weight=-0.01,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"])},
+    # )
+    # # (5) Shaping tasks: lower pole angular velocity
+    # pole_vel = RewTerm(
+    #     func=mdp.joint_vel_l1,
+    #     weight=-0.005,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"])},
+    # )
+
+    distance = RewTerm(
+        func=mdp.distance_robot2cube,
+        weight=-1,
     )
-    # (5) Shaping tasks: lower pole angular velocity
-    pole_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.005,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_wheel"])},
-    )
+
 
 @configclass
 class TerminationsCfg:
@@ -184,10 +169,55 @@ class TerminationsCfg:
     # (1) Time out
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     # (2) Cart out of bounds
-    cart_out_of_bounds = DoneTerm(
-        func=mdp.joint_pos_out_of_manual_limit,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
-    )
+    # cart_out_of_bounds = DoneTerm(
+    #     func=mdp.joint_pos_out_of_manual_limit,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
+    # )
+
+
+@configclass
+class CurriculumCfg:
+    """Configuration for the curriculum."""
+    pass
+
+@configclass
+class CommandsCfg:
+    """Command terms for the MDP."""
+
+    # no commands for this MDP
+    null = mdp.NullCommandCfg()
+
+
+# @configclass
+# class CarterEnvCfg(ManagerBasedRLEnvCfg):
+#     """Configuration for the cartpole environment."""
+#
+#     # Scene settings
+#     scene = CarterSceneCfg(num_envs=1, env_spacing=2.5)
+#     # Basic settings
+#     observations = ObservationsCfg()
+#     actions = ActionsCfg()
+#     events = EventCfg()
+#     curriculum: CurriculumCfg = CurriculumCfg()
+#     rewards: RewardsCfg = RewardsCfg()
+#     terminations: TerminationsCfg = TerminationsCfg()
+#     # No command generator
+#     commands: CommandsCfg = CommandsCfg()
+#
+#     def __post_init__(self):
+#         """Post initialization."""
+#         # viewer settings
+#         self.viewer.eye = [4.5, 0.0, 6.0]
+#         self.viewer.lookat = [0.0, 0.0, 2.0]
+#         # step settings
+#         self.decimation = 5  # env step every 4 sim steps: 200Hz / 4 = 50Hz
+#         # simulation settings
+#         self.sim.dt = 0.01  # sim step every 5ms: 200Hz
+#         self.episode_length_s = 6
+
+
+
+
 def main():
     """Main function."""
     # parse the arguments
@@ -196,7 +226,7 @@ def main():
     # setup base environment
     env = ManagerBasedRLEnv(cfg=env_cfg)
     #joint_efforts = torch.randn_like(env.action_manager.action)
-    joint_efforts = torch.tensor([[-5.0, 5.0]])
+    joint_efforts = torch.tensor([[-2.0, 2.0]])
     # simulate physics
     count = 0
     while simulation_app.is_running():
@@ -211,12 +241,12 @@ def main():
             # sample random actions
             if count % 100 == 0:
                 #joint_efforts = torch.randn_like(env.action_manager.action)
-                joint_efforts = torch.tensor([[-5.0,5.0]])
+                joint_efforts = torch.tensor([[-2.0,2.0]])
             # step the environment
             obs, rew, terminated, truncated, info = env.step(joint_efforts)
             # print current orientation of pole
             #
-            print("[Env 0]: Pole joint: ", obs["policy"][0])
+            #print("[Env 0]: Pole joint: ", obs["policy"][0])
             # update counter
             count += 1
 
@@ -224,7 +254,17 @@ def main():
             cube : RigidObject =env.scene["cube"]
             camera = env.scene["carter_camera_first_person"]
             #print(asset.joint_names)
-            #print(cube.data.root_state_w)
+            print(cube.data.root_pos_w)
+            print(asset.data.root_pos_w)
+            robot = env.scene[SceneEntityCfg("robot").name]
+            cube = env.scene[SceneEntityCfg("cube").name]
+
+            robot_world_pos = robot.data.root_pos_w
+            cube_world_pos = cube.data.root_pos_w
+
+            distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
+            #print(distance,rew,rew.shape)
+            print(env.action_space.shape)
 
 
 

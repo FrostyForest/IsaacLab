@@ -24,3 +24,15 @@ def joint_pos_target_l2(env: ManagerBasedRLEnv, target: float, asset_cfg: SceneE
     joint_pos = wrap_to_pi(asset.data.joint_pos[:, asset_cfg.joint_ids])
     # compute the reward
     return torch.sum(torch.square(joint_pos - target), dim=1)
+
+def distance_robot2cube(
+    env: ManagerBasedRLEnv
+) -> torch.Tensor:
+    robot=env.scene["robot"]
+    cube=env.scene["cube"]
+
+    robot_world_pos=robot.data.root_pos_w
+    cube_world_pos = cube.data.root_pos_w
+
+    distance=torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
+    return distance

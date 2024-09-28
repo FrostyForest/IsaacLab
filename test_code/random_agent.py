@@ -48,6 +48,8 @@ def main():
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
     print(f"[INFO]: Gym action space: {env.action_space}")
+    actions = 2 * torch.randn(env.action_space.shape, device=env.unwrapped.device)
+    print(actions, env.action_space.shape)
     # reset environment
     env.reset()
     # simulate environment
@@ -55,7 +57,7 @@ def main():
         # run everything in inference mode
         with torch.inference_mode():
             # sample actions from -1 to 1
-            actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
+            actions = 2 * torch.ones(env.action_space.shape, device=env.unwrapped.device)
             # apply actions
             env.step(actions)
 
