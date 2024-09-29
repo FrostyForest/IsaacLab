@@ -166,4 +166,4 @@ def distance_in( env: ManagerBasedRLEnv)-> torch.Tensor:
     cube_world_pos = cube.data.root_pos_w
     distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
 
-    return torch.any(distance<0.4)
+    return torch.any(distance<0.75)

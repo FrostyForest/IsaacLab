@@ -55,7 +55,7 @@ class CarterSceneCfg(InteractiveSceneCfg):
 
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/cube",
-        spawn=sim_utils.CuboidCfg(size=(0.3,0.3,0.4),
+        spawn=sim_utils.CuboidCfg(size=(0.5,0.5,0.5),
                                   rigid_props=sim_utils.RigidBodyPropertiesCfg(),
                                   mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                                   collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -155,7 +155,7 @@ class EventCfg:
         func=mdp.set_default_root_state,
         mode="reset",
         params={
-            "pose_range": {"x": (-2, 2), "y": (-2, 2), "z": (0.05, 0.1)},
+            "pose_range": {"x": (-2.5, 2.5), "y": (-2.5, 2.5), "z": (0.05, 0.1)},
             "asset_cfg": SceneEntityCfg("cube"),
         },
     )
