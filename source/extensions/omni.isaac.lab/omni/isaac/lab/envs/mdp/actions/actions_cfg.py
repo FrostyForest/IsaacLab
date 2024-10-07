@@ -9,7 +9,7 @@ from omni.isaac.lab.controllers import DifferentialIKControllerCfg
 from omni.isaac.lab.managers.action_manager import ActionTerm, ActionTermCfg
 from omni.isaac.lab.utils import configclass
 
-from . import binary_joint_actions, joint_actions, joint_actions_to_limits, non_holonomic_actions, task_space_actions
+from . import binary_joint_actions, joint_actions, joint_actions_to_limits, non_holonomic_actions, task_space_actions,asset_actions
 
 ##
 # Joint actions.
@@ -31,6 +31,24 @@ class JointActionCfg(ActionTermCfg):
     """Offset factor for the action (float or dict of regex expressions). Defaults to 0.0."""
     preserve_order: bool = False
     """Whether to preserve the order of the joint names in the action output. Defaults to False."""
+
+
+@configclass
+class AssetActionCfg(JointActionCfg):
+    """Configuration for the joint position action term.
+
+    See :class:`JointPositionAction` for more details.
+    """
+
+    class_type: type[ActionTerm] = asset_actions.AssetAction
+
+    use_default_offset: bool = True
+    """Whether to use default joint positions configured in the articulation asset as offset.
+    Defaults to True.
+
+    If True, this flag results in overwriting the values of :attr:`offset` to the default joint positions
+    from the articulation asset.
+    """
 
 
 @configclass
@@ -248,3 +266,6 @@ class DifferentialInverseKinematicsActionCfg(ActionTermCfg):
     """Scale factor for the action. Defaults to 1.0."""
     controller: DifferentialIKControllerCfg = MISSING
     """The configuration for the differential IK controller."""
+
+class RotateForwardActionCfg(ActionTermCfg):
+    class_type: type[ActionTerm] = joint_actions_to_limits.JointPositionToLimitsAction

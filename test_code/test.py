@@ -1,14 +1,27 @@
 import torch
 import torch.nn.functional as F
-image_tensor = torch.randint(0, 256, size=(1, 224, 224,4), dtype=torch.uint8)
 
 
-image_tensor_float = image_tensor.float().permute(0, 3, 1, 2)
 
-# 使用 interpolate 进行放缩
-resized_image_tensor = F.interpolate(image_tensor_float, size=(112, 112), mode='bilinear', align_corners=False)
 
-# 将张量转换回 torch.uint8 类型 (可选)
-resized_image_tensor_uint8 = resized_image_tensor.to(torch.uint8).permute(0,2,3,1)
+test_tensor=torch.tensor([[1,-1,-1],[0.5,0.5,0.5],[0,0,1],[0,0,1]],dtype=torch.float)
 
-print(resized_image_tensor_uint8.shape)
+softmax_tensor=torch.softmax(test_tensor,dim=-1)
+
+num_envs=4
+
+action1 = torch.tensor([1,1],dtype=torch.float)
+action1=action1.unsqueeze(0).repeat(num_envs,1)
+
+action2 = torch.tensor([1,-1],dtype=torch.float)
+action2=action2.unsqueeze(0).repeat(num_envs,1)
+
+action3 = torch.tensor([1,1],dtype=torch.float)
+action3=action3.unsqueeze(0).repeat(num_envs,1)
+
+actions = torch.stack([action1,action2,action3],dim=1)
+print(actions,actions.shape)
+print(softmax_tensor,softmax_tensor.shape)
+result = torch.einsum("ij,ijk->ik", softmax_tensor, actions)
+
+print(result,result.shape)
