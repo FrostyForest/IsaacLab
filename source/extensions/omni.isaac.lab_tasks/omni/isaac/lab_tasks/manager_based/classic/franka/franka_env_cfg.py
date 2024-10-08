@@ -5,7 +5,7 @@ import torch
 
 import omni.isaac.lab.sim as sim_utils
 #import omni.isaac.lab.envs.mdp as mdp
-import omni.isaac.lab_tasks.manager_based.classic.carter.mdp as mdp
+import omni.isaac.lab_tasks.manager_based.classic.franka.mdp as mdp
 from omni.isaac.lab.envs import ManagerBasedEnv, ManagerBasedEnvCfg,ManagerBasedRLEnv,ManagerBasedRLEnvCfg
 from omni.isaac.lab.assets import ArticulationCfg, AssetBaseCfg,RigidObjectCfg
 from omni.isaac.lab.sensors import CameraCfg
@@ -22,7 +22,7 @@ from omni.isaac.lab.assets import Articulation, RigidObject
 ##
 # Pre-defined configs
 ##
-from omni.isaac.lab_assets.carter import CARTER_CFG  # isort:skip
+from omni.isaac.lab_assets.franka import FRANKA_PANDA_CFG  # isort:skip
 
 ##
 # Scene definition
@@ -30,7 +30,7 @@ from omni.isaac.lab_assets.carter import CARTER_CFG  # isort:skip
 
 
 @configclass
-class CarterSceneCfg(InteractiveSceneCfg):
+class FrankaSceneCfg(InteractiveSceneCfg):
     """Configuration for a cart-pole scene."""
 
     # ground plane
@@ -39,8 +39,8 @@ class CarterSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
     )
 
-    # cartpole
-    robot: ArticulationCfg = CARTER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    # franka
+    robot: ArticulationCfg = FRANKA_PANDA_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # lights
     dome_light = AssetBaseCfg(
@@ -89,7 +89,7 @@ class ActionsCfg:
     left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=5)
     right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=5)
 
-    carter_action = mdp.AssetActionCfg(asset_name="robot", joint_names=["right_wheel","left_wheel"])
+    # carter_action = mdp.AssetActionCfg(asset_name="robot", joint_names=["right_wheel","left_wheel"])
 
 
 @configclass
@@ -231,7 +231,7 @@ class TerminationsCfg:
     #     func=mdp.joint_pos_out_of_manual_limit,
     #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
     # )
-    too_close = DoneTerm(func=mdp.distance_in, time_out=True)
+    #too_close = DoneTerm(func=mdp.distance_in, time_out=True)
 
 
 @configclass
@@ -252,7 +252,7 @@ class CarterEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the cartpole environment."""
 
     # Scene settings
-    scene = CarterSceneCfg(num_envs=1, env_spacing=2.5)
+    scene = FrankaSceneCfg(num_envs=1, env_spacing=2.5)
     # Basic settings
     observations = ObservationsCfg()
     actions = ActionsCfg()
