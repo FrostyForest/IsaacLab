@@ -10,7 +10,7 @@ Cartpole balancing environment.
 import gymnasium as gym
 
 from . import agents
-from .carter_env_cfg import FrankaEnvCfg
+from .franka_env_cfg import FrankaEnvCfg
 
 ##
 # Register Gym environments.

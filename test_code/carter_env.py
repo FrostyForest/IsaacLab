@@ -245,7 +245,7 @@ def main():
             #     #joint_efforts = torch.randn_like(env.action_manager.action)
             #     joint_efforts = torch.tensor([[-2.0,2.0]])
             # step the environment
-            obs, rew, terminated, truncated, info = env.step(torch.tensor([[100,-1,-1]]))
+            obs, rew, terminated, truncated, info = env.step(torch.tensor([[-1,1]]))
             # print current orientation of pole
             #
             #print("[Env 0]: Pole joint: ", obs["policy"][0])
@@ -264,7 +264,7 @@ def main():
             robot_world_pos = asset.data.root_pos_w
             cube_world_pos = cube.data.root_pos_w
             distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
-            print(distance)
+            #print(distance)
             #print(env.action_space.shape)
 
             # raw_actions = torch.tensor([[1]])
@@ -272,6 +272,14 @@ def main():
             # left_wheel_velocity_action.process_actions(raw_actions)
             # # 应用处理后的动作到机器人关节
             # left_wheel_velocity_action.apply_actions()
+
+            robot_entity_cfg = SceneEntityCfg("robot", joint_names=[".*wheel.*"])
+            robot_entity_cfg.resolve(env.scene)
+            ids=robot_entity_cfg.joint_ids
+            print(ids)
+            robot_entity_cfg = SceneEntityCfg("robot", joint_ids=ids)
+            name=robot_entity_cfg.joint_names
+            print(name)
 
 
 

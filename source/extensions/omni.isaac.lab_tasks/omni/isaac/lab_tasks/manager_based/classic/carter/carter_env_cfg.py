@@ -89,7 +89,7 @@ class ActionsCfg:
     left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=5)
     right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=5)
 
-    carter_action = mdp.AssetActionCfg(asset_name="robot", joint_names=["right_wheel","left_wheel"])
+    #carter_action = mdp.AssetActionCfg(asset_name="robot", joint_names=["right_wheel","left_wheel"])
 
 
 @configclass

@@ -55,7 +55,7 @@ class FrankaSceneCfg(InteractiveSceneCfg):
 
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/cube",
-        spawn=sim_utils.CuboidCfg(size=(0.5,0.5,0.5),
+        spawn=sim_utils.CuboidCfg(size=(0.25,0.25,0.25),
                                   rigid_props=sim_utils.RigidBodyPropertiesCfg(),
                                   mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                                   collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -248,7 +248,7 @@ class CommandsCfg:
 
 
 @configclass
-class CarterEnvCfg(ManagerBasedRLEnvCfg):
+class FrankaEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the cartpole environment."""
 
     # Scene settings
