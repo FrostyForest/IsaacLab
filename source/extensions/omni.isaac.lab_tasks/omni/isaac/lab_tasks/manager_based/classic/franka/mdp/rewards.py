@@ -31,12 +31,12 @@ def distance_robot2cube(
     robot=env.scene["robot"]
     cube=env.scene["cube"]
 
-    robot_world_pos_default = robot.data.default_root_state[:,:3]
+    robot_world_pos_default = robot.data.default_root_state[:, :3]
     cube_world_pos_default = cube.data.default_root_state[:, :3]
-    distance0 = torch.linalg.norm(robot_world_pos_default[:, :2] - cube_world_pos_default[:, :2])
+    distance0 = torch.linalg.norm(robot_world_pos_default[:, :3] - cube_world_pos_default[:, :3])
 
-    robot_world_pos=robot.data.root_pos_w
+    robot_world_pos=robot.data.body_pos_w[:,8,:3]
     cube_world_pos = cube.data.root_pos_w
 
-    distance=torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
+    distance=torch.linalg.norm(robot_world_pos[:, :3] - cube_world_pos[:, :3])
     return (distance0-distance)/(distance0+0.3)

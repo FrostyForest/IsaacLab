@@ -18,6 +18,7 @@ from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.scene import InteractiveSceneCfg
 from omni.isaac.lab.utils import configclass
 from omni.isaac.lab.assets import Articulation, RigidObject
+from omni.isaac.lab.controllers import DifferentialIKControllerCfg
 
 ##
 # Pre-defined configs
@@ -64,8 +65,8 @@ class FrankaSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0,2.0,0.4)),
     )
 
-    carter_camera_first_person =  CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/chassis_link/camera_mount/carter_camera_first_person_test",
+    camera_bottom =  CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/panda_link1/camera_bottom",
         update_period=0.1,
         height=480,
         width=640,
@@ -73,7 +74,19 @@ class FrankaSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
         ),
-        offset=CameraCfg.OffsetCfg(pos=(0.0892, 0.0, 0.3265), rot=(-0.5, -0.5, 0.5, 0.5), convention="opengl"),
+        offset=CameraCfg.OffsetCfg(pos=(0., -0.14, 0.), rot=(0.5, 0.5, -0.5, -0.5), convention="opengl"),
+    )
+    #
+    camera_hand =  CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/panda_hand/camera_hand",
+        update_period=0.1,
+        height=480,
+        width=640,
+        data_types=["rgb", "distance_to_image_plane"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        ),
+        offset=CameraCfg.OffsetCfg(pos=(0.01259, 0.01059, 0.09526), rot=(0., -0.70711, -0.70711, -0.), convention="opengl"),
     )
 
 
@@ -86,10 +99,14 @@ class ActionsCfg:
     # left_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=500.0)
     # right_wheel_efforts = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=500.0)
 
-    left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=5)
-    right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=5)
+    # left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=5)
+    # right_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["right_wheel"], scale=5)
 
     # carter_action = mdp.AssetActionCfg(asset_name="robot", joint_names=["right_wheel","left_wheel"])
+
+
+    franka_action = mdp.DifferentialInverseKinematicsActionCfg(asset_name="robot",joint_names=["panda_joint.*"], body_name=["panda_hand"],
+                                                               controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),scale=0.1)
 
 
 @configclass
@@ -101,11 +118,11 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        # joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
+        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
         # joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
         #joint_vel = ObsTerm(func=mdp.joint_vel)
         #joint_names = ObsTerm(func=mdp.joint_names)
-        camera = ObsTerm(func=mdp.camera_data)
+        #camera = ObsTerm(func=mdp.camera_data)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False

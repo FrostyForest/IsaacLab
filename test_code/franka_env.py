@@ -59,8 +59,7 @@ def main():
     #joint_efforts = torch.tensor([[-2.0, 2.0]])
     # simulate physics
     count = 0
-    left_wheel_velocity = mdp.JointVelocityActionCfg(asset_name="robot", joint_names=["left_wheel"], scale=5)
-    left_wheel_velocity_action = mdp.JointVelocityAction(cfg=left_wheel_velocity,env=env)
+    action0 = torch.randn_like(env.action_manager.action)
     while simulation_app.is_running():
         with torch.inference_mode():
             # reset
@@ -71,11 +70,13 @@ def main():
                 print("[INFO]: Resetting environment...")
 
             # sample random actions
-            # if count % 100 == 0:
-            #     #joint_efforts = torch.randn_like(env.action_manager.action)
-            #     joint_efforts = torch.tensor([[-2.0,2.0]])
+            if count % 1 == 0:
+                action=torch.randn_like(env.action_manager.action)
+                joint_efforts = action*0.5+action0*0.5
+                action0=action
+
             # step the environment
-            obs, rew, terminated, truncated, info = env.step(torch.tensor([[100,-1,-1]]))
+            obs, rew, terminated, truncated, info = env.step(joint_efforts)
             # print current orientation of pole
             #
             #print("[Env 0]: Pole joint: ", obs["policy"][0])
@@ -84,16 +85,18 @@ def main():
 
             asset: Articulation = env.scene[SceneEntityCfg("robot").name]
             cube : RigidObject =env.scene["cube"]
-            camera = env.scene["carter_camera_first_person"]
+            #camera = env.scene["carter_camera_first_person"]
             #print(asset.joint_names)
-            # print(cube.data.root_pos_w)
-            # print(asset.data.root_pos_w)
-            robot_world_pos_default = asset.data.default_root_state[:, :3]
+
+            robot = env.scene["robot"]
+            cube = env.scene["cube"]
+
+            robot_world_pos_default = robot.data.default_root_state[:, :3]
             cube_world_pos_default = cube.data.default_root_state[:, :3]
-            distance0 = torch.linalg.norm(robot_world_pos_default[:, :2] - cube_world_pos_default[:, :2])
-            robot_world_pos = asset.data.root_pos_w
+            distance0 = torch.linalg.norm(robot_world_pos_default[:, :3] - cube_world_pos_default[:, :3])
+            robot_world_pos = robot.data.body_pos_w[:, 8, :3]
             cube_world_pos = cube.data.root_pos_w
-            distance = torch.linalg.norm(robot_world_pos[:, :2] - cube_world_pos[:, :2])
+            distance = torch.linalg.norm(robot_world_pos[:, :3] - cube_world_pos[:, :3])
             print(distance)
             #print(env.action_space.shape)
 
@@ -103,11 +106,19 @@ def main():
             # # 应用处理后的动作到机器人关节
             # left_wheel_velocity_action.apply_actions()
 
+            # 输出机械臂的各个body的名字
+            # body_names = asset.data.body_names
+            # for i, body_name in enumerate(body_names):
+            #     print(f"Body {i}: {body_name}")
+
+            #print(asset.data.body_pos_w)
+
 
 
 
     # close the environment
     env.close()
+
 
 
 if __name__ == "__main__":
