@@ -56,13 +56,13 @@ class FrankaSceneCfg(InteractiveSceneCfg):
 
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/cube",
-        spawn=sim_utils.CuboidCfg(size=(0.25,0.25,0.25),
+        spawn=sim_utils.CuboidCfg(size=(0.2,0.2,0.2),
                                   rigid_props=sim_utils.RigidBodyPropertiesCfg(),
                                   mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                                   collision_props=sim_utils.CollisionPropertiesCfg(),
                                   visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
                                   ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0,2.0,0.4)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5,0.5,0.3)),
     )
 
     camera_bottom =  CameraCfg(
@@ -106,7 +106,7 @@ class ActionsCfg:
 
 
     franka_action = mdp.DifferentialInverseKinematicsActionCfg(asset_name="robot",joint_names=["panda_joint.*"], body_name=["panda_hand"],
-                                                               controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),scale=0.1)
+                                                               controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),scale=1)
 
 
 @configclass
@@ -118,15 +118,16 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
+        #joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
         # joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
         #joint_vel = ObsTerm(func=mdp.joint_vel)
         #joint_names = ObsTerm(func=mdp.joint_names)
-        #camera = ObsTerm(func=mdp.camera_data)
+        camera1 = ObsTerm(func=mdp.hand_camera_data)
+        camera2 = ObsTerm(func=mdp.bottom_camera_data)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
-            self.concatenate_terms = True
+            self.concatenate_terms = False
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
@@ -174,7 +175,7 @@ class EventCfg:
         func=mdp.set_default_root_state,
         mode="reset",
         params={
-            "pose_range": {"x": (-2.5, 2.5), "y": (-2.5, 2.5), "z": (0.05, 0.1)},
+            "pose_range": {"x": (-0.75, 0.75), "y": (-0.75, 0.75), "z": (0.05, 0.1)},
             "asset_cfg": SceneEntityCfg("cube"),
         },
     )

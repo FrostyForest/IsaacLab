@@ -214,7 +214,7 @@ def generated_commands(env: ManagerBasedRLEnv, command_name: str) -> torch.Tenso
     return env.command_manager.get_command(command_name)
 
 
-def camera_data(env: ManagerBasedRLEnv)-> torch.Tensor:
+def hand_camera_data(env: ManagerBasedRLEnv)-> torch.Tensor:
 
     sensor: camera = env.scene.sensors["carter_camera_first_person"]
     data=sensor.data.output["rgb"]

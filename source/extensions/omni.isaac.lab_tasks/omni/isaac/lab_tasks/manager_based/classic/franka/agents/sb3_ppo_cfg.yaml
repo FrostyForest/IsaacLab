@@ -4,7 +4,7 @@ seed: 42
 
 
 n_timesteps: !!float 1e6
-policy: 'CnnPolicy'
+policy: 'MultiInputPolicy'
 batch_size: 128
 n_steps: 512
 gamma: 0.99
