@@ -65,6 +65,7 @@ class FrankaSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5,0.5,0.3)),
     )
 
+
     camera_bottom =  CameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/panda_link1/camera_bottom",
         update_period=0.1,
@@ -88,6 +89,7 @@ class FrankaSceneCfg(InteractiveSceneCfg):
         ),
         offset=CameraCfg.OffsetCfg(pos=(0.01259, 0.01059, 0.09526), rot=(0., -0.70711, -0.70711, -0.), convention="opengl"),
     )
+
 
 
 @configclass
@@ -233,6 +235,11 @@ class RewardsCfg:
     # )
 
     distance = RewTerm(
+        func=mdp.distance_robot2cube,
+        weight=1,
+    )
+
+    action_norm = RewTerm(
         func=mdp.distance_robot2cube,
         weight=1,
     )

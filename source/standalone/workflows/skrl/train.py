@@ -143,6 +143,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg, agent_cfg: dict):
     if args_cli.ml_framework.startswith("jax"):
         agent_cfg["models"]["separate"] = True  # shared model is not supported in JAX
     # non-shared models
+    # 创建策略网络和价值网络
     if agent_cfg["models"]["separate"]:
         models["policy"] = gaussian_model(
             observation_space=env.observation_space,
