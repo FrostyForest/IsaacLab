@@ -188,7 +188,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         runner.agent.load(resume_path)
 
     # run training
-    runner.run()
+    runner.run()#训练逻辑被封装到runner类里面
 
     # close the simulator
     env.close()

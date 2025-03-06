@@ -13,7 +13,7 @@ from pxr import UsdGeom
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg
+from isaaclab.assets import Articulation, ArticulationCfg,RigidObject,RigidObjectCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
@@ -21,10 +21,10 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import sample_uniform
-
+from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns
 
 @configclass
-class FrankaCabinetEnvCfg(DirectRLEnvCfg):
+class FrankaCubeEnvCfg(DirectRLEnvCfg):
     # env
     episode_length_s = 8.3333  # 500 timesteps
     decimation = 2
@@ -74,7 +74,7 @@ class FrankaCabinetEnvCfg(DirectRLEnvCfg):
                 "panda_joint7": 0.469,
                 "panda_finger_joint.*": 0.035,
             },
-            pos=(1.0, 0.0, 0.0),
+            pos=(0.0, 0.0, 0.0),
             rot=(0.0, 0.0, 0.0, 1.0),
         ),
         actuators={
@@ -102,6 +102,22 @@ class FrankaCabinetEnvCfg(DirectRLEnvCfg):
         },
     )
 
+    cube=RigidObjectCfg(
+        prim_path="/World/envs/env_.*/Cube",
+        spawn=sim_utils.CuboidCfg(
+                size=(0.1, 0.1, 0.1),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    solver_position_iteration_count=4, solver_velocity_iteration_count=0
+                ),
+                mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                collision_props=sim_utils.CollisionPropertiesCfg(),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=(0.5, 0.5, 0.25),
+            rot=(1.0, 0.0, 0.0, 0.0),
+        ),
+    )
     # cabinet
     cabinet = ArticulationCfg(
         prim_path="/World/envs/env_.*/Cabinet",
@@ -110,7 +126,7 @@ class FrankaCabinetEnvCfg(DirectRLEnvCfg):
             activate_contact_sensors=False,
         ),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0, 0.4),
+            pos=(-1, -1, 0.4),
             rot=(0.1, 0.0, 0.0, 0.0),
             joint_pos={
                 "door_left_joint": 0.0,
@@ -151,6 +167,22 @@ class FrankaCabinetEnvCfg(DirectRLEnvCfg):
         ),
     )
 
+    camera = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
+        update_period=0.1,
+        height=256,
+        width=256,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+
+            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+
+        ),
+
+        offset=CameraCfg.OffsetCfg(pos=(0, 0.0, 0), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+
+    )
+
     action_scale = 7.5
     dof_velocity_scale = 0.1
 
@@ -162,7 +194,7 @@ class FrankaCabinetEnvCfg(DirectRLEnvCfg):
     finger_reward_scale = 2.0
 
 
-class FrankaCabinetEnv(DirectRLEnv):
+class FrankaCubeEnv(DirectRLEnv):
     # pre-physics step calls
     #   |-- _pre_physics_step(action)
     #   |-- _apply_action()
@@ -172,9 +204,9 @@ class FrankaCabinetEnv(DirectRLEnv):
     #   |-- _reset_idx(env_ids)
     #   |-- _get_observations()
 
-    cfg: FrankaCabinetEnvCfg
+    cfg: FrankaCubeEnvCfg
 
-    def __init__(self, cfg: FrankaCabinetEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: FrankaCubeEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         def get_env_local_pose(env_pos: torch.Tensor, xformable: UsdGeom.Xformable, device: torch.device):
@@ -264,6 +296,7 @@ class FrankaCabinetEnv(DirectRLEnv):
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self._cabinet = Articulation(self.cfg.cabinet)
+        self._cube = RigidObject(self.cfg.cube)
         self.scene.articulations["robot"] = self._robot
         self.scene.articulations["cabinet"] = self._cabinet
 
@@ -280,12 +313,12 @@ class FrankaCabinetEnv(DirectRLEnv):
 
     # pre-physics step calls
 
-    def _pre_physics_step(self, actions: torch.Tensor):
+    def _pre_physics_step(self, actions: torch.Tensor):#对动作进行裁剪
         self.actions = actions.clone().clamp(-1.0, 1.0)
         targets = self.robot_dof_targets + self.robot_dof_speed_scales * self.dt * self.actions * self.cfg.action_scale
         self.robot_dof_targets[:] = torch.clamp(targets, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
 
-    def _apply_action(self):
+    def _apply_action(self):#对动作进行应用
         self._robot.set_joint_position_target(self.robot_dof_targets)
 
     # post-physics step calls
