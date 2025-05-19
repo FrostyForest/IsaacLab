@@ -57,7 +57,7 @@ def main():
             # sample actions from -1 to 1
             actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
             # apply actions
-            env.step(actions)
+            observations, reward, terminated, truncated, info =env.step(actions)
 
     # close the simulator
     env.close()
