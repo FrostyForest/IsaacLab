@@ -21,21 +21,28 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import sample_uniform
-from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.sensors import CameraCfg, ContactSensorCfg, RayCasterCfg, patterns,Camera
+from torchvision import transforms
+from collections import OrderedDict
 
 @configclass
 class FrankaCubeEnvCfg(DirectRLEnvCfg):
     # env
     episode_length_s = 8.3333  # 500 timesteps
-    decimation = 2
+    decimation = 15
     action_space = 9
-    observation_space = 23
+    observation_space = {
+        'rgb':[64,64,3],
+        'rgb2':[64,64,3],
+        'actions':9,
+        'to_target':3
+    }
     state_space = 0
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120,
-        render_interval=decimation,
+        dt=1 / 100,
+        render_interval=2,
         disable_contact_processing=True,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -47,7 +54,7 @@ class FrankaCubeEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=3.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=8, env_spacing=3.0, replicate_physics=True)
 
     # robot
     robot = ArticulationCfg(
@@ -168,7 +175,7 @@ class FrankaCubeEnvCfg(DirectRLEnvCfg):
     )
 
     camera = CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
+        prim_path="/World/envs/env_.*/Robot/panda_link7/front_cam",
         update_period=0.1,
         height=256,
         width=256,
@@ -179,8 +186,25 @@ class FrankaCubeEnvCfg(DirectRLEnvCfg):
 
         ),
 
-        offset=CameraCfg.OffsetCfg(pos=(0, 0.0, 0), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0, 0.0, 0.15), rot=(1, 0, 0, 0), convention="ros"),#xyzw
 
+    )
+
+    camera2 = CameraCfg(
+        prim_path="/World/envs/env_.*/Robot/panda_link1/base_cam",
+        update_period=0.1,
+        height=256,
+        width=256,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+
+            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+
+        ),
+
+        offset=CameraCfg.OffsetCfg(pos=(0,-0.06, -0.18), rot=(0, 0,-0.70711, 0.70711), convention="ros"),#wxyz
+        #为什么我设置(0, -0.70711, -0.70711, 0)到了环境中发生了变化，改成world试一下
+        #offset=CameraCfg.OffsetCfg(pos=(0,-0.13, 0.0), rot=(0, 0,0, 1), convention="ros"),#wxyz
     )
 
     action_scale = 7.5
@@ -190,7 +214,7 @@ class FrankaCubeEnvCfg(DirectRLEnvCfg):
     dist_reward_scale = 1.5
     rot_reward_scale = 1.5
     open_reward_scale = 10.0
-    action_penalty_scale = 0.05
+    action_penalty_scale = 0.01#0.05
     finger_reward_scale = 2.0
 
 
@@ -293,12 +317,27 @@ class FrankaCubeEnv(DirectRLEnv):
         self.drawer_grasp_rot = torch.zeros((self.num_envs, 4), device=self.device)
         self.drawer_grasp_pos = torch.zeros((self.num_envs, 3), device=self.device)
 
+        self.panda_hand_link_idx=self._robot.find_bodies("panda_hand")[0][0]
+        self.storage_beginning=torch.zeros((self.num_envs), device=self.device,dtype=torch.bool)
+
+        self.panda_hand_pose=torch.zeros((self.num_envs, 3), device=self.device)
+        self.cube_pose=torch.zeros((self.num_envs, 3), device=self.device)
+        self.initial_distance=torch.norm(self.panda_hand_pose-self.cube_pose, p=2, dim=-1)#shape:(num_envs)
+        self.current_distance=torch.norm(self.panda_hand_pose-self.cube_pose, p=2, dim=-1)#shape:(num_envs)
+
+        self.camera_data=torch.zeros((self.num_envs, 64,64,3), device=self.device)
+        self.camera_data2=torch.zeros((self.num_envs, 64,64,3), device=self.device)
+        
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self._cabinet = Articulation(self.cfg.cabinet)
         self._cube = RigidObject(self.cfg.cube)
+        self._camera = Camera(self.cfg.camera)
+        self._camera2 = Camera(self.cfg.camera2)
         self.scene.articulations["robot"] = self._robot
-        self.scene.articulations["cabinet"] = self._cabinet
+        # self.scene.sensors['camera']=self._camera
+        # self.scene.sensors['camera2']=self._camera2
+
 
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
@@ -311,6 +350,9 @@ class FrankaCubeEnv(DirectRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
+
+
+
     # pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):#对动作进行裁剪
@@ -320,12 +362,16 @@ class FrankaCubeEnv(DirectRLEnv):
 
     def _apply_action(self):#对动作进行应用
         self._robot.set_joint_position_target(self.robot_dof_targets)
+        #print(self.initial_distance.shape,self.initial_distance)
 
     # post-physics step calls
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        terminated = self._cabinet.data.joint_pos[:, 3] > 0.39
+        reach_in=torch.any(self.current_distance/self.initial_distance<0.13,dim=-1)
+        reach_in = reach_in | torch.any(self.current_distance<0.12,dim=-1)
+        terminated = reach_in
         truncated = self.episode_length_buf >= self.max_episode_length - 1
+
         return terminated, truncated
 
     def _get_rewards(self) -> torch.Tensor:
@@ -354,6 +400,8 @@ class FrankaCubeEnv(DirectRLEnv):
             self.cfg.action_penalty_scale,
             self.cfg.finger_reward_scale,
             self._robot.data.joint_pos,
+            self.current_distance,
+            self.initial_distance,
         )
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
@@ -374,8 +422,26 @@ class FrankaCubeEnv(DirectRLEnv):
         zeros = torch.zeros((len(env_ids), self._cabinet.num_joints), device=self.device)
         self._cabinet.write_joint_state_to_sim(zeros, zeros, env_ids=env_ids)
 
+        # initial_cube_state=torch.tensor([0.5, 0.5, 0.25,1.0, 0.0, 0.0, 0.0],device=self.device)
+        # initial_cube_state=initial_cube_state.unsqueeze(0).expand(len(env_ids), -1) 
+        default_root_state = self._cube.data.default_root_state[env_ids]
+        default_root_state[:, :3] += self.scene.env_origins[env_ids]
+
+
+        random_pos_dif=sample_uniform(
+            -0.25,
+            0.25,
+            (len(env_ids), 2),
+            self.device,
+        )
+        pos=default_root_state[:, :7]
+        pos[:,:2]+=random_pos_dif
+        self._cube.write_root_pose_to_sim(pos, env_ids)
+
         # Need to refresh the intermediate values so that _get_observations() can use the latest values
         self._compute_intermediate_values(env_ids)
+
+        self.storage_beginning[env_ids]=False
 
     def _get_observations(self) -> dict:
         dof_pos_scaled = (
@@ -384,19 +450,35 @@ class FrankaCubeEnv(DirectRLEnv):
             / (self.robot_dof_upper_limits - self.robot_dof_lower_limits)
             - 1.0
         )
-        to_target = self.drawer_grasp_pos - self.robot_grasp_pos
+        #to_target = self.drawer_grasp_pos - self.robot_grasp_pos
+        to_target = self._cube.data.body_pos_w[:, 0] - self._robot.data.body_pos_w[:, self.hand_link_idx]#torch.Size([n, 3])
 
-        obs = torch.cat(
-            (
-                dof_pos_scaled,
-                self._robot.data.joint_vel * self.cfg.dof_velocity_scale,
-                to_target,
-                self._cabinet.data.joint_pos[:, 3].unsqueeze(-1),
-                self._cabinet.data.joint_vel[:, 3].unsqueeze(-1),
-            ),
-            dim=-1,
-        )
-        return {"policy": torch.clamp(obs, -5.0, 5.0)}
+        # obs = torch.cat(
+        #     (
+        #         dof_pos_scaled,
+        #         self._robot.data.joint_vel * self.cfg.dof_velocity_scale,
+        #         to_target,
+        #         self._cabinet.data.joint_pos[:, 3].unsqueeze(-1),
+        #         self._cabinet.data.joint_vel[:, 3].unsqueeze(-1),
+        #     ),
+        #     dim=-1,
+        # )
+        
+        obs= {}
+        obs['actions']=self.actions
+        obs['rgb']=self.camera_data
+        obs['rgb2']=self.camera_data2
+        obs['to_target']=to_target
+        env_ids=(~self.storage_beginning).nonzero(as_tuple=False).squeeze(-1)#哪些环境是已经重置了的
+        if env_ids is not None:
+            self.panda_hand_pose[env_ids]=self._robot.data.body_pos_w[env_ids, self.panda_hand_link_idx].squeeze(1)
+            self.cube_pose[env_ids]=self._cube.data.body_pos_w[env_ids].squeeze(1)
+            self.initial_distance[env_ids]=torch.norm(self.panda_hand_pose[env_ids]-self.cube_pose[env_ids], p=2, dim=-1)
+            self.storage_beginning[env_ids]=True
+
+        
+        #print(self.scene['camera'].data.output['rgb'].shape)
+        return {"policy": obs}
 
     # auxiliary methods
 
@@ -424,6 +506,53 @@ class FrankaCubeEnv(DirectRLEnv):
             self.drawer_local_grasp_pos[env_ids],
         )
 
+        self.panda_hand_pose[env_ids]=self._robot.data.body_pos_w[env_ids, self.panda_hand_link_idx].squeeze(1)
+        self.cube_pose[env_ids]=self._cube.data.body_pos_w[env_ids].squeeze(1)
+        self.current_distance[env_ids]=torch.norm(self.panda_hand_pose[env_ids]-self.cube_pose[env_ids], p=2, dim=-1)
+
+        # import matplotlib.pyplot as plt#测试相机信息
+        # img_tensor_hwc = self._camera.data.output["rgb"].squeeze(0) # 或者 tensor_image[0]
+        # print(f"移除 Batch 维度后形状: {img_tensor_hwc.shape}")
+
+        # # 2. 确保在 CPU 上 (如果你的 tensor 在 GPU 上)
+        # if img_tensor_hwc.is_cuda:
+        #     img_tensor_hwc = img_tensor_hwc.cpu()
+
+        # # 3. 转换为 NumPy 数组
+        # #    注意：如果原始 tensor 需要梯度，先 .detach()
+        # img_numpy = img_tensor_hwc.detach().numpy()
+        # print(f"NumPy 数组形状: {img_numpy.shape}, 数据类型: {img_numpy.dtype}")
+
+        # # 4. 数据类型和范围处理 (根据实际情况调整)
+        # #    - 如果是 float 类型，确保值在 [0, 1]
+        # #      如果值超出范围 (例如 -1 到 1, 或者 0 到 255 但仍是 float)，需要调整
+        # #      例如，如果值是0-255的float，可以 img_numpy = img_numpy / 255.0
+        # #      例如，如果值是-1到1的float，可以 img_numpy = (img_numpy + 1.0) / 2.0
+        # #    - 如果希望转换为 uint8 类型 (0-255)
+        # #      img_numpy_uint8 = (img_numpy * 255).astype(np.uint8)
+
+        # # 在这个示例中，我们的 tensor_image 已经是 float 且值在 [0, 1]
+
+        # # --- 方法 1: 使用 Matplotlib ---
+        # print("\n--- 使用 Matplotlib 显示 ---")
+        # plt.figure("Matplotlib Display")
+        # plt.imshow(img_numpy) # Matplotlib 的 imshow 可以处理 float [0,1] 或 uint8 [0,255]
+        # plt.title("Image (Matplotlib)")
+        # plt.axis('off') # 关闭坐标轴
+        # plt.show()
+        # plt.imsave("saved_image_matplotlib_uint8.png", img_numpy)
+        # breakpoint()
+
+        self.camera_data=(self._camera.data.output["rgb"]/255.0-0.5)*5#uint8->fp32
+        resize_transform_bilinear = transforms.Resize(size=(64, 64))
+        self.camera_data=resize_transform_bilinear(self.camera_data.permute(0,3,1,2)).permute(0,2,3,1)
+
+        self.camera_data2=(self._camera2.data.output["rgb"]/255.0-0.5)*5#uint8->fp32
+        self.camera_data2=resize_transform_bilinear(self.camera_data2.permute(0,3,1,2)).permute(0,2,3,1)
+
+
+
+
     def _compute_rewards(
         self,
         actions,
@@ -445,6 +574,8 @@ class FrankaCubeEnv(DirectRLEnv):
         action_penalty_scale,
         finger_reward_scale,
         joint_positions,
+        current_distance,
+        initial_distance,
     ):
         # distance from hand to the drawer
         d = torch.norm(franka_grasp_pos - drawer_grasp_pos, p=2, dim=-1)
@@ -471,7 +602,6 @@ class FrankaCubeEnv(DirectRLEnv):
 
         # how far the cabinet has been opened out
         open_reward = cabinet_dof_pos[:, 3]  # drawer_top_joint
-
         # penalty for distance of each finger from the drawer handle
         lfinger_dist = franka_lfinger_pos[:, 2] - drawer_grasp_pos[:, 2]
         rfinger_dist = drawer_grasp_pos[:, 2] - franka_rfinger_pos[:, 2]
@@ -479,29 +609,30 @@ class FrankaCubeEnv(DirectRLEnv):
         finger_dist_penalty += torch.where(lfinger_dist < 0, lfinger_dist, torch.zeros_like(lfinger_dist))
         finger_dist_penalty += torch.where(rfinger_dist < 0, rfinger_dist, torch.zeros_like(rfinger_dist))
 
+        distance_penalty=current_distance/initial_distance-1#current_distance越小越好
+        distance_penalty.clamp_(max=0.0)
         rewards = (
-            dist_reward_scale * dist_reward
-            + rot_reward_scale * rot_reward
-            + open_reward_scale * open_reward
-            + finger_reward_scale * finger_dist_penalty
             - action_penalty_scale * action_penalty
-        )
+            - dist_reward_scale * distance_penalty
+        )#shape:(num_envs)
 
         self.extras["log"] = {
-            "dist_reward": (dist_reward_scale * dist_reward).mean(),
-            "rot_reward": (rot_reward_scale * rot_reward).mean(),
-            "open_reward": (open_reward_scale * open_reward).mean(),
+            # "dist_reward": (dist_reward_scale * dist_reward).mean(),
+            # "rot_reward": (rot_reward_scale * rot_reward).mean(),
+            # "open_reward": (open_reward_scale * open_reward).mean(),
             "action_penalty": (-action_penalty_scale * action_penalty).mean(),
-            "left_finger_distance_reward": (finger_reward_scale * lfinger_dist).mean(),
-            "right_finger_distance_reward": (finger_reward_scale * rfinger_dist).mean(),
-            "finger_dist_penalty": (finger_reward_scale * finger_dist_penalty).mean(),
+            # "left_finger_distance_reward": (finger_reward_scale * lfinger_dist).mean(),
+            # "right_finger_distance_reward": (finger_reward_scale * rfinger_dist).mean(),
+            # "finger_dist_penalty": (finger_reward_scale * finger_dist_penalty).mean(),
+            'distance_penalty': (- dist_reward_scale * distance_penalty).mean()
         }
 
         # bonus for opening drawer properly
-        rewards = torch.where(cabinet_dof_pos[:, 3] > 0.01, rewards + 0.25, rewards)
-        rewards = torch.where(cabinet_dof_pos[:, 3] > 0.2, rewards + 0.25, rewards)
-        rewards = torch.where(cabinet_dof_pos[:, 3] > 0.35, rewards + 0.25, rewards)
-
+        # rewards = torch.where(cabinet_dof_pos[:, 3] > 0.01, rewards + 0.25, rewards)
+        # rewards = torch.where(cabinet_dof_pos[:, 3] > 0.2, rewards + 0.25, rewards)
+        # rewards = torch.where(cabinet_dof_pos[:, 3] > 0.35, rewards + 0.25, rewards)
+        #print(- action_penalty_scale * action_penalty,- dist_reward_scale * distance_penalty)
+        print(- action_penalty_scale * action_penalty,- dist_reward_scale * distance_penalty)
         return rewards
 
     def _compute_grasp_transforms(
@@ -523,3 +654,5 @@ class FrankaCubeEnv(DirectRLEnv):
         )
 
         return global_franka_rot, global_franka_pos, global_drawer_rot, global_drawer_pos
+    
+
