@@ -75,8 +75,8 @@ models["value"] = models["policy"]  # same instance: shared model
 # configure and instantiate the agent (visit its documentation to see all the options)
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html#configuration-and-hyperparameters
 cfg = PPO_DEFAULT_CONFIG.copy()
-cfg["rollouts"] = 96  # memory_size
-cfg["learning_epochs"] = 5
+cfg["rollouts"] = 48  # memory_size
+cfg["learning_epochs"] = 6
 cfg["mini_batches"] = 4  # 96 * 4096 / 98304
 cfg["discount_factor"] = 0.99
 cfg["lambda"] = 0.95

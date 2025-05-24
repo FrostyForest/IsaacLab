@@ -1,71 +1,31 @@
-from __future__ import annotations
-
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
-"""This script demonstrates how to create a simple stage in Isaac Sim.
-
-.. code-block:: bash
-
-    # Usage
-    ./isaaclab.sh -p scripts/tutorials/00_sim/create_empty.py
-
-"""
-
-"""Launch Isaac Sim Simulator first."""
-
-
-import argparse
-
-from isaaclab.app import AppLauncher
-
-# create argparser
-parser = argparse.ArgumentParser(description="Tutorial on creating an empty stage.")
-# append AppLauncher cli args
-AppLauncher.add_app_launcher_args(parser)
-# parse the arguments
-args_cli = parser.parse_args()
-# launch omniverse app
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
-
-"""Rest everything follows."""
-
-from isaaclab.sim import SimulationCfg, SimulationContext
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 import torch
+from transformers import AutoModel, AutoProcessor,BitsAndBytesConfig
+from transformers.image_utils import load_image
+import time
 
+# 指定本地模型和处理器的路径
+local_model_path = "/home/linhai/code/IsaacLab/my_code/local_siglip2/" # 替换成你实际的文件夹路径
+# 从本地路径加载模型和处理器
+model = AutoModel.from_pretrained(local_model_path, device_map="auto",torch_dtype=torch.bfloat16,).eval()
+processor = AutoProcessor.from_pretrained(local_model_path)
 
-def main():
-    """Main function."""
+# 加载图像 (这一步仍然会从网络下载图像，除非你也把图像下载到本地)
+image_url = "/home/linhai/图片/10753_crt_V9wc8.jpg"
+# 如果你想从本地加载图像:
+# 1. 先下载图像: wget https://huggingface.co/datasets/merve/coco/resolve/main/val2017/000000000285.jpg -O my_image.jpg
+# 2. 然后使用本地路径: image = load_image("./my_image.jpg")
+image = load_image(image_url)
+candidate_labels = ["a girl with yellow hair", "a boy with yellow hair"]
+texts = [f'{label}' for label in candidate_labels]
 
-    # Initialize the simulation context
-    sim_cfg = SimulationCfg(dt=0.01)
-    sim = SimulationContext(sim_cfg)
-    # Set main camera
-    sim.set_camera_view([2.5, 2.5, 2.5], [0.0, 0.0, 0.0])
-
-    # Play the simulator
-    sim.reset()
-    # Now we are ready!
-    print("[INFO]: Setup complete...")
-
-    # Simulate physics
-    while simulation_app.is_running():
-        pos= torch.tensor([1,1,1])
-        quat= torch.tensor([1,0,0,0])
-
-        pos_inverse=tf_inverse(quat,pos)
-
-        print(pos_inverse)
-        # perform step
-        sim.step()
-
-
-if __name__ == "__main__":
-    # run the main function
-    main()
-    # close sim app
-    simulation_app.close()
+start_t=time.time()
+inputs = processor(text=texts, images=image, padding="max_length", max_num_patches=64, return_tensors="pt").to("cuda")
+end_t=time.time()
+print(end_t-start_t)
+with torch.no_grad():
+    outputs = model(**inputs)
+    breakpoint()
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(probs)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")

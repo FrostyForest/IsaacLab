@@ -41,6 +41,9 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     ee_frame: FrameTransformerCfg = MISSING
     # target object: will be populated by agent env cfg
     object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    green_object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    red_object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    yellow_object: RigidObjectCfg | DeformableObjectCfg = MISSING
 
     # Table
     table = AssetBaseCfg(
@@ -209,11 +212,11 @@ class LiftEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 2
-        self.episode_length_s = 5.0
+        self.decimation = 8
+        self.episode_length_s = 5.5
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
-        self.sim.render_interval = self.decimation
+        self.sim.render_interval = 2
 
         self.sim.physx.bounce_threshold_velocity = 0.2
         self.sim.physx.bounce_threshold_velocity = 0.01

@@ -28,8 +28,8 @@ from collections import OrderedDict
 @configclass
 class FrankaCubeEnvCfg(DirectRLEnvCfg):
     # env
-    episode_length_s = 8.3333  # 500 timesteps
-    decimation = 15
+    episode_length_s = 5.5  # 500 timesteps
+    decimation = 10
     action_space = 9
     observation_space = {
         'rgb':[64,64,3],
@@ -42,7 +42,7 @@ class FrankaCubeEnvCfg(DirectRLEnvCfg):
     # simulation
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 100,
-        render_interval=2,
+        render_interval=5,
         disable_contact_processing=True,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -544,6 +544,7 @@ class FrankaCubeEnv(DirectRLEnv):
         # breakpoint()
 
         self.camera_data=(self._camera.data.output["rgb"]/255.0-0.5)*5#uint8->fp32
+        print(self.camera_data.shape)
         resize_transform_bilinear = transforms.Resize(size=(64, 64))
         self.camera_data=resize_transform_bilinear(self.camera_data.permute(0,3,1,2)).permute(0,2,3,1)
 
@@ -632,7 +633,7 @@ class FrankaCubeEnv(DirectRLEnv):
         # rewards = torch.where(cabinet_dof_pos[:, 3] > 0.2, rewards + 0.25, rewards)
         # rewards = torch.where(cabinet_dof_pos[:, 3] > 0.35, rewards + 0.25, rewards)
         #print(- action_penalty_scale * action_penalty,- dist_reward_scale * distance_penalty)
-        print(- action_penalty_scale * action_penalty,- dist_reward_scale * distance_penalty)
+        #print(- action_penalty_scale * action_penalty,- dist_reward_scale * distance_penalty)
         return rewards
 
     def _compute_grasp_transforms(
