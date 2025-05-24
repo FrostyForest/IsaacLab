@@ -42,6 +42,8 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     # target object: will be populated by agent env cfg
     object: RigidObjectCfg | DeformableObjectCfg = MISSING
 
+    camera:
+
     # Table
     table = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
