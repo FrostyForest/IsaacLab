@@ -64,6 +64,7 @@ _build
 
 # 忽略所有的 .safetensors 文件
 *.safetensors
+*.model
 
 # 忽略所有名为 "runs" 的文件夹
 runs/
