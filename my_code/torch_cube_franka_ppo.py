@@ -96,7 +96,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
 
 
 # load and wrap the Isaac Lab environment
-env = load_isaaclab_env(task_name="Isaac-Franka-Cube-Direct-v0",num_envs=32)#设置环境数量
+env = load_isaaclab_env(task_name="Isaac-Franka-Cube-Direct-v0",num_envs=5)#设置环境数量
 env = wrap_env(env)
 
 device = env.device

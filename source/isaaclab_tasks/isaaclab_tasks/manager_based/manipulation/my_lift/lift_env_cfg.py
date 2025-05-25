@@ -21,6 +21,7 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UsdF
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
+from isaaclab.sensors import CameraCfg
 from . import mdp
 
 ##
@@ -42,7 +43,11 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     # target object: will be populated by agent env cfg
     object: RigidObjectCfg | DeformableObjectCfg = MISSING
 
-    camera:
+    green_object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    red_object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    yellow_object: RigidObjectCfg | DeformableObjectCfg = MISSING
+
+    camera_1: CameraCfg = MISSING
 
     # Table
     table = AssetBaseCfg(
@@ -110,7 +115,7 @@ class ObservationsCfg:
 
         def __post_init__(self):
             self.enable_corruption = True
-            self.concatenate_terms = True
+            self.concatenate_terms = False
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()

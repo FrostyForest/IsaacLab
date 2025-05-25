@@ -15,6 +15,7 @@ image_url = "/home/linhai/图片/10753_crt_V9wc8.jpg"
 # 1. 先下载图像: wget https://huggingface.co/datasets/merve/coco/resolve/main/val2017/000000000285.jpg -O my_image.jpg
 # 2. 然后使用本地路径: image = load_image("./my_image.jpg")
 image = load_image(image_url)
+print(type(image))
 candidate_labels = ["a girl with yellow hair", "a boy with yellow hair"]
 texts = [f'{label}' for label in candidate_labels]
 
@@ -24,8 +25,9 @@ end_t=time.time()
 print(end_t-start_t)
 with torch.no_grad():
     outputs = model(**inputs)
-    breakpoint()
 logits_per_image = outputs.logits_per_image
 probs = torch.sigmoid(logits_per_image)
+image_embeddings = outputs.image_embeds
+text_embeddings = outputs.text_embeds
 print(probs)
 print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")

@@ -543,8 +543,8 @@ class FrankaCubeEnv(DirectRLEnv):
         # plt.imsave("saved_image_matplotlib_uint8.png", img_numpy)
         # breakpoint()
 
+        #----self._camera.data.output["rgb"]:dtype:torch.uint8;(batch_size, height, width, num_channels)
         self.camera_data=(self._camera.data.output["rgb"]/255.0-0.5)*5#uint8->fp32
-        print(self.camera_data.shape)
         resize_transform_bilinear = transforms.Resize(size=(64, 64))
         self.camera_data=resize_transform_bilinear(self.camera_data.permute(0,3,1,2)).permute(0,2,3,1)
 
