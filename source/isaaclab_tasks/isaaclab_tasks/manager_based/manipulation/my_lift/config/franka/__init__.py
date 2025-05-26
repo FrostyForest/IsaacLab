@@ -17,7 +17,7 @@ from . import agents
 
 gym.register(
     id="Isaac-my_Lift-Cube-Franka-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    entry_point="isaaclab_tasks.manager_based.manipulation.my_lift.lift_env:LiftEnv",
     kwargs={
         "env_cfg_entry_point": f"{__name__}.joint_pos_env_cfg:FrankaCubeLiftEnvCfg",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:LiftCubePPORunnerCfg",

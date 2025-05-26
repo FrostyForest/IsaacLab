@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+#该脚本使用ppo来训练franka来根据指令抓取不同颜色的方块
 # import the skrl components to build the RL system
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.envs.loaders.torch import load_isaaclab_env
@@ -24,43 +24,21 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
         DeterministicMixin.__init__(self, clip_actions)
-
-        self.state_net=nn.Sequential(
-            nn.Linear(12,12),
-            nn.ELU(),
-            nn.Linear(12,4),
-            nn.ELU(),
-        )
-        self.rgb_net=nn.Sequential(
-            nn.Conv2d(in_channels=6,out_channels=12,kernel_size=3,stride=1,padding='same'),
-            nn.ELU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(in_channels=12, out_channels=18, kernel_size=3, stride=1, padding='same'),
-            nn.ELU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(in_channels=18, out_channels=24, kernel_size=5, stride=3, padding='valid'),
-            nn.Flatten(),
-            nn.LayerNorm(384),
-            nn.ELU(),
-            nn.Linear(in_features=384,out_features=10)
-        )
-        self.net = nn.Sequential(nn.Linear(14, 24),
+        self.image_feature_projection=nn.Linear(768, 24)
+        self.text_feature_projection=nn.Linear(768, 18)
+        self.net = nn.Sequential(nn.Linear(84, 128),
                                  nn.ELU(),
-                                 nn.Linear(24, 24),
+                                 nn.Linear(128, 128),
+                                 nn.ELU(),
+                                 nn.Linear(128, 42),
                                  nn.ELU())
 
-        self.mean_layer = nn.Sequential(
-            nn.Linear(24, self.num_actions),
-            nn.ELU(),
-            nn.Linear(self.num_actions, self.num_actions),
-        )
+        self.mean_layer = nn.Sequential(nn.Linear(42, self.num_actions),
+                                        nn.ELU(),
+                                        nn.Linear(self.num_actions, self.num_actions))
         self.log_std_parameter = nn.Parameter(torch.ones(self.num_actions))
 
-        self.value_layer = nn.Sequential(
-            nn.Linear(24, 10),
-            nn.ELU(),
-            nn.Linear(10, 1),
-        )
+        self.value_layer = nn.Linear(42, 1)
 
     def act(self, inputs, role):
         if role == "policy":
@@ -69,35 +47,26 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             return DeterministicMixin.act(self, inputs, role)
 
     def compute(self, inputs, role):
-
         space = self.tensor_to_space(inputs["states"], self.observation_space)
+        obs_except_feature=torch.cat([space['joint_pos'],space['joint_vel'],space['object_position'],space['target_object_position'],space['actions']],dim=-1)#(n,42)
         if role == "policy":
-            rgb_data=torch.cat([space['rgb'],space['rgb2']],dim=-1).permute(0,3,1,2)
-            action_data=space['actions']
-            distance_data=space['to_target']
-
-            feature1=self.state_net(torch.cat([action_data,distance_data],dim=-1))
-            feature2=self.rgb_net(rgb_data)
-
-            self._shared_output = self.net(torch.cat([feature1,feature2],dim=-1))
+            f1=self.image_feature_projection(space['image_feature'])
+            f2=self.text_feature_projection(space['text_feature'])
+            obs=torch.cat([obs_except_feature,f1,f2],dim=-1)
+            self._shared_output = self.net(obs)
             return self.mean_layer(self._shared_output), self.log_std_parameter, {}
         elif role == "value":
-            #shared_output = self.net(inputs["states"]) if self._shared_output is None else self._shared_output
-            if self._shared_output is None:
-                rgb_data=torch.cat([space['rgb'],space['rgb2']],dim=-1).permute(0,3,1,2)
-                action_data=space['actions']
-                distance_data=space['to_target']
-                feature1=self.state_net(torch.cat([action_data,distance_data],dim=-1))
-                feature2=self.rgb_net(rgb_data)
-                shared_output = self.net(torch.cat([feature1,feature2],dim=-1))
-            else:
-                shared_output= self._shared_output
+            f1=self.image_feature_projection(space['image_feature'])
+            f2=self.text_feature_projection(space['text_feature'])
+            obs=torch.cat([obs_except_feature,f1,f2],dim=-1)
+            shared_output = self.net(obs) if self._shared_output is None else self._shared_output
             self._shared_output = None
             return self.value_layer(shared_output), {}
 
 
 # load and wrap the Isaac Lab environment
-env = load_isaaclab_env(task_name="Isaac-Franka-Cube-Direct-v0",num_envs=5)#设置环境数量
+task_name="Isaac-my_Lift-Cube-Franka-v0"
+env = load_isaaclab_env(task_name=task_name,num_envs=32)
 env = wrap_env(env)
 
 device = env.device
@@ -119,7 +88,7 @@ models["value"] = models["policy"]  # same instance: shared model
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html#configuration-and-hyperparameters
 cfg = PPO_DEFAULT_CONFIG.copy()
 cfg["rollouts"] = 48  # memory_size
-cfg["learning_epochs"] = 5
+cfg["learning_epochs"] = 8
 cfg["mini_batches"] = 4  # 96 * 4096 / 98304
 cfg["discount_factor"] = 0.99
 cfg["lambda"] = 0.95
@@ -144,7 +113,7 @@ cfg["value_preprocessor_kwargs"] = {"size": 1, "device": device}
 # logging to TensorBoard and write checkpoints (in timesteps)
 cfg["experiment"]["write_interval"] = 336
 cfg["experiment"]["checkpoint_interval"] = 3360
-cfg["experiment"]["directory"] = "runs/torch/Isaac-Franka-Cube-Direct-v0"
+cfg["experiment"]["directory"] = f"runs/torch/{task_name}"
 
 agent = PPO(models=models,
             memory=memory,

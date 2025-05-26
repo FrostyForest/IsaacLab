@@ -23,6 +23,9 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from isaaclab.sensors import CameraCfg
 from . import mdp
+import string
+
+from .mdp import PREDEFINED_TARGETS, TARGET_TO_ID, ID_TO_TARGET, NUM_TARGETS
 
 ##
 # Scene definition
@@ -41,7 +44,7 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     # end-effector sensor: will be populated by agent env cfg
     ee_frame: FrameTransformerCfg = MISSING
     # target object: will be populated by agent env cfg
-    object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    #object: RigidObjectCfg | DeformableObjectCfg = MISSING
 
     green_object: RigidObjectCfg | DeformableObjectCfg = MISSING
     red_object: RigidObjectCfg | DeformableObjectCfg = MISSING
@@ -83,7 +86,7 @@ class CommandsCfg:
         asset_name="robot",
         body_name=MISSING,  # will be set by agent env cfg
         resampling_time_range=(5.0, 5.0),
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformPoseCommandCfg.Ranges(
             pos_x=(0.4, 0.6), pos_y=(-0.25, 0.25), pos_z=(0.25, 0.5), roll=(0.0, 0.0), pitch=(0.0, 0.0), yaw=(0.0, 0.0)
         ),
@@ -109,10 +112,22 @@ class ObservationsCfg:
 
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
-        object_position = ObsTerm(func=mdp.object_position_in_robot_root_frame)
-        target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})
+        object_position = ObsTerm(func=mdp.get_cubes_position)#各个cube的位置
+        target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})#target position
         actions = ObsTerm(func=mdp.last_action)
+        image_feature = ObsTerm(func=mdp.image_feature_obs,noise=None) # 使用新的观测函数名
+        text_feature = ObsTerm(func=mdp.text_feature_obs,noise=None) 
 
+        #------- obs shape
+        """
+        joint_pos torch.Size([2, 9])
+        joint_vel torch.Size([2, 9])
+        object_position torch.Size([2, 3, 3])
+        target_object_position torch.Size([2, 7])
+        actions torch.Size([2, 8])
+        image_feature torch.Size([2, 768])
+        text_feature torch.Size([2, 768])
+        """
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = False
@@ -133,8 +148,42 @@ class EventCfg:
         params={
             "pose_range": {"x": (-0.1, 0.1), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
             "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("object", body_names="Object"),
+            "asset_cfg": SceneEntityCfg("yellow_object", body_names="Cube"),
         },
+    )
+
+    reset_object_position2 = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-0.15, 0.15), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
+            "velocity_range": {},
+            "asset_cfg": SceneEntityCfg("green_object", body_names="Cube"),
+        },
+    )
+
+    reset_object_position3 = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {"x": (-0.15, 0.15), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
+            "velocity_range": {},
+            "asset_cfg": SceneEntityCfg("red_object", body_names="Cube"),
+        },
+    )
+
+    randomize_task_goal_event = EventTerm(
+        func=mdp.randomize_string_task_goal, # 使用我们新创建的函数
+        mode="reset" # 确保它在环境重置时被调用
+        # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
+                      # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
+    )
+
+    startup_randomize_task_goal = EventTerm(
+        func=mdp.randomize_string_task_goal,
+        mode="startup" # 这个事件只会在环境第一次启动时运行一次
+        # params: {} # 如果需要，可以传递参数，但 randomize_string_task_goal
+                      # 通常会作用于所有环境 (env_ids=None 效果)
     )
 
 
@@ -174,10 +223,19 @@ class TerminationsCfg:
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
 
-    object_dropping = DoneTerm(
-        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("object")}
+    yellow_object_dropping = DoneTerm(
+        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("yellow_object")}
     )
 
+    green_object_dropping = DoneTerm(
+        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("green_object")}
+    )
+
+    red_object_dropping = DoneTerm(
+        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("red_object")}
+    )
+
+    
 
 @configclass
 class CurriculumCfg:
@@ -216,7 +274,7 @@ class LiftEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 8
+        self.decimation = 10
         self.episode_length_s = 5.5
         # simulation settings
         self.sim.dt = 0.01  # 100Hz
@@ -227,3 +285,4 @@ class LiftEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
         self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
         self.sim.physx.friction_correlation_distance = 0.00625
+

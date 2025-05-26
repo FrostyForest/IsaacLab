@@ -58,7 +58,11 @@ def main():
             actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
             # apply actions
             observations, reward, terminated, truncated, info =env.step(actions)
-            print(observations)
+            #print(observations)
+            obs=observations['policy']
+            for key in obs.keys():
+                print(key,obs[key].shape)
+            print('end -------------------')
 
     # close the simulator
     env.close()

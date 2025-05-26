@@ -46,22 +46,22 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         self.commands.object_pose.body_name = "panda_hand"
 
         # Set Cube as object
-        self.scene.object = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Object",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd",
-                scale=(0.8, 0.8, 0.8),
-                rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    disable_gravity=False,
-                ),
-            ),
-        )
+        # self.scene.object = RigidObjectCfg(
+        #     prim_path="{ENV_REGEX_NS}/Object",
+        #     init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0.055], rot=[1, 0, 0, 0]),
+        #     spawn=UsdFileCfg(
+        #         usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/DexCube/dex_cube_instanceable.usd",
+        #         scale=(0.8, 0.8, 0.8),
+        #         rigid_props=RigidBodyPropertiesCfg(
+        #             solver_position_iteration_count=16,
+        #             solver_velocity_iteration_count=1,
+        #             max_angular_velocity=1000.0,
+        #             max_linear_velocity=1000.0,
+        #             max_depenetration_velocity=5.0,
+        #             disable_gravity=False,
+        #         ),
+        #     ),
+        # )
 
         self.scene.green_object=RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/GreenCube",
@@ -130,7 +130,6 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         )
 
 
-
         # Listens to the required transforms
         marker_cfg = FRAME_MARKER_CFG.copy()
         marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
@@ -138,7 +137,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         self.scene.ee_frame = FrameTransformerCfg(
             prim_path="{ENV_REGEX_NS}/Robot/panda_link0",
             debug_vis=False,
-            #visualizer_cfg=marker_cfg,#不需要时隐藏标记
+            visualizer_cfg=marker_cfg,
             target_frames=[
                 FrameTransformerCfg.FrameCfg(
                     prim_path="{ENV_REGEX_NS}/Robot/panda_hand",
@@ -149,6 +148,16 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
                 ),
             ],
         )
+
+        self.observation_space = {
+        'joint_pos':9,
+        'joint_vel':9,
+        'object_position':9,
+        'target_object_position':7,
+        'actions':8,
+        'image_feature':768,
+        'text_feature':768
+        }
 
 
 @configclass
