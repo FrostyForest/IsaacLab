@@ -112,17 +112,19 @@ class ObservationsCfg:
 
         joint_pos = ObsTerm(func=mdp.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp.joint_vel_rel)
+        ee_position = ObsTerm(func=mdp.ee_position_in_robot_root_frame)
         object_position = ObsTerm(func=mdp.get_cubes_position)#各个cube的位置
         target_object_position = ObsTerm(func=mdp.generated_commands, params={"command_name": "object_pose"})#target position
         actions = ObsTerm(func=mdp.last_action)
-        image_feature = ObsTerm(func=mdp.image_feature_obs,noise=None) # 使用新的观测函数名
+        # image_feature = ObsTerm(func=mdp.image_feature_obs,noise=None) # 使用新的观测函数名
         text_feature = ObsTerm(func=mdp.text_feature_obs,noise=None) 
 
         #------- obs shape
         """
         joint_pos torch.Size([2, 9])
         joint_vel torch.Size([2, 9])
-        object_position torch.Size([2, 3, 3])
+        ee_position torch.Size([2, 3])
+        object_position torch.Size([2, 9])
         target_object_position torch.Size([2, 7])
         actions torch.Size([2, 8])
         image_feature torch.Size([2, 768])
@@ -130,7 +132,7 @@ class ObservationsCfg:
         """
         def __post_init__(self):
             self.enable_corruption = True
-            self.concatenate_terms = False
+            self.concatenate_terms = True
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
@@ -146,7 +148,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.1, 0.1), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
+            "pose_range": {"x": (-0.1, 0.1), "y": (-0.15, 0.15), "z": (0.0, 0.0)},
             "velocity_range": {},
             "asset_cfg": SceneEntityCfg("yellow_object", body_names="Cube"),
         },

@@ -25,20 +25,28 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
         DeterministicMixin.__init__(self, clip_actions)
         self.image_feature_projection=nn.Linear(768, 24)
-        self.text_feature_projection=nn.Linear(768, 18)
-        self.net = nn.Sequential(nn.Linear(84, 128),
+        self.text_feature_projection=nn.Linear(768, 16)
+        self.robot_encoder=nn.Sequential(
+            nn.Linear(25,64),
+            nn.SiLU(),
+            nn.Linear(64,32),
+        )
+        self.object_encoder=nn.Sequential(
+            nn.Linear(19,64),
+            nn.SiLU(),
+            nn.Linear(64,32),
+        )
+        self.net = nn.Sequential(nn.Linear(104, 256),
                                  nn.ELU(),
-                                 nn.Linear(128, 128),
-                                 nn.ELU(),
-                                 nn.Linear(128, 42),
+                                 nn.Linear(256, 48),
                                  nn.ELU())
 
-        self.mean_layer = nn.Sequential(nn.Linear(42, self.num_actions),
+        self.mean_layer = nn.Sequential(nn.Linear(48, self.num_actions),
                                         nn.ELU(),
                                         nn.Linear(self.num_actions, self.num_actions))
         self.log_std_parameter = nn.Parameter(torch.ones(self.num_actions))
 
-        self.value_layer = nn.Linear(42, 1)
+        self.value_layer = nn.Linear(48, 1)
 
     def act(self, inputs, role):
         if role == "policy":
@@ -48,32 +56,40 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
 
     def compute(self, inputs, role):
         space = self.tensor_to_space(inputs["states"], self.observation_space)
-        obs_except_feature=torch.cat([space['joint_pos'],space['joint_vel'],space['object_position'],space['target_object_position'],space['actions']],dim=-1)#(n,42)
+        robot_state_obs=torch.cat([space['joint_pos'],space['joint_vel'],space['actions']],dim=-1)#(n,26)
+        object_state_obs=torch.cat([space['ee_position'],space['object_position'],space['target_object_position']],dim=-1)#(n,19)
         if role == "policy":
             f1=self.image_feature_projection(space['image_feature'])
             f2=self.text_feature_projection(space['text_feature'])
-            obs=torch.cat([obs_except_feature,f1,f2],dim=-1)
+            robot_feature=self.robot_encoder(robot_state_obs)
+            object_feature=self.object_encoder(object_state_obs)
+            obs=torch.cat([robot_feature,object_feature,f1,f2],dim=-1)
             self._shared_output = self.net(obs)
             return self.mean_layer(self._shared_output), self.log_std_parameter, {}
         elif role == "value":
-            f1=self.image_feature_projection(space['image_feature'])
-            f2=self.text_feature_projection(space['text_feature'])
-            obs=torch.cat([obs_except_feature,f1,f2],dim=-1)
-            shared_output = self.net(obs) if self._shared_output is None else self._shared_output
+            if self._shared_output is None:
+                f1=self.image_feature_projection(space['image_feature'])
+                f2=self.text_feature_projection(space['text_feature'])
+                robot_feature=self.robot_encoder(robot_state_obs)
+                object_feature=self.object_encoder(object_state_obs)
+                obs=torch.cat([robot_feature,object_feature,f1,f2],dim=-1)
+                shared_output = self.net(obs)  
+            else :
+                shared_output = self._shared_output
             self._shared_output = None
             return self.value_layer(shared_output), {}
 
 
 # load and wrap the Isaac Lab environment
-task_name="Isaac-my_Lift-Cube-Franka-v0"
-env = load_isaaclab_env(task_name=task_name,num_envs=32)
+task_name="Isaac-my_Lift-Cube-Franka-IK-Rel-v0"
+env = load_isaaclab_env(task_name=task_name,num_envs=48)
 env = wrap_env(env)
 
 device = env.device
 
 
 # instantiate a memory as rollout buffer (any memory can be used for this)
-memory = RandomMemory(memory_size=48, num_envs=env.num_envs, device=device)
+memory = RandomMemory(memory_size=64, num_envs=env.num_envs, device=device)
 
 
 # instantiate the agent's models (function approximators).
@@ -87,7 +103,7 @@ models["value"] = models["policy"]  # same instance: shared model
 # configure and instantiate the agent (visit its documentation to see all the options)
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html#configuration-and-hyperparameters
 cfg = PPO_DEFAULT_CONFIG.copy()
-cfg["rollouts"] = 48  # memory_size
+cfg["rollouts"] = 64  # memory_size
 cfg["learning_epochs"] = 8
 cfg["mini_batches"] = 4  # 96 * 4096 / 98304
 cfg["discount_factor"] = 0.99
@@ -102,17 +118,17 @@ cfg["ratio_clip"] = 0.2
 cfg["value_clip"] = 0.2
 cfg["clip_predicted_values"] = True
 cfg["entropy_loss_scale"] = 0.01
-cfg["value_loss_scale"] = 1.0
+cfg["value_loss_scale"] = 2.0
 cfg["kl_threshold"] = 0
 cfg["rewards_shaper"] = None
-cfg["time_limit_bootstrap"] = True
+cfg["time_limit_bootstrap"] = False
 cfg["state_preprocessor"] = RunningStandardScaler
 cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
 cfg["value_preprocessor"] = RunningStandardScaler
 cfg["value_preprocessor_kwargs"] = {"size": 1, "device": device}
 # logging to TensorBoard and write checkpoints (in timesteps)
-cfg["experiment"]["write_interval"] = 336
-cfg["experiment"]["checkpoint_interval"] = 3360
+cfg["experiment"]["write_interval"] = 256
+cfg["experiment"]["checkpoint_interval"] = 2560
 cfg["experiment"]["directory"] = f"runs/torch/{task_name}"
 
 agent = PPO(models=models,
@@ -124,7 +140,7 @@ agent = PPO(models=models,
 
 
 # configure and instantiate the RL trainer
-cfg_trainer = {"timesteps": 67200, "headless": True}
+cfg_trainer = {"timesteps": 51200, "headless": True}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
 
 # start training

@@ -65,6 +65,7 @@ model = Siglip2TextModel.from_pretrained(local_model_path, device_map="auto").ev
 tokenizer = AutoTokenizer.from_pretrained(local_model_path)
 
 s=time.time()
+
 inputs = tokenizer(texts,padding="max_length", return_tensors="pt").to('cuda')
 with torch.no_grad():
     outputs = model(**inputs)

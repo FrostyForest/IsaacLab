@@ -18,6 +18,7 @@ from .string_target import PREDEFINED_TARGETS, TARGET_TO_ID, ID_TO_TARGET, NUM_T
 from transformers import AutoProcessor
 from . import image
 import torch.nn.functional as F
+from isaaclab.sensors import FrameTransformer
 
 
 def object_position_in_robot_root_frame(
@@ -34,7 +35,18 @@ def object_position_in_robot_root_frame(
     )
     return object_pos_b
 
-
+def ee_position_in_robot_root_frame(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")
+)-> torch.Tensor:
+    robot: RigidObject = env.scene[robot_cfg.name]
+    ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
+    ee_pos_w = ee_frame.data.target_pos_w[..., 0, :]
+    ee_pos_b, _ = subtract_frame_transforms(
+        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], ee_pos_w
+    )
+    return ee_pos_b
 
 def image_feature_obs(env: LiftEnv) -> torch.Tensor:
     if hasattr(env, 'current_target_state_per_env') and env.encoded_task_goal_per_env is not None:
@@ -68,7 +80,8 @@ def image_feature_obs(env: LiftEnv) -> torch.Tensor:
 def text_feature_obs(env: LiftEnv) -> torch.Tensor:
     if hasattr(env, 'current_target_state_per_env') and env.encoded_task_goal_per_env is not None:
         #text_list=env.current_target_strings_per_env
-        return env.current_target_state_per_env
+        #return env.current_target_state_per_env
+        return env.current_target_ids_per_env
     else:
     # 在 ObservationManager 的 _prepare_terms 阶段，如果属性尚未创建，
     # 返回一个具有正确“形状”的占位符张量，但只包含一个样本（或使用 env.cfg 中的 num_envs）。
@@ -83,7 +96,8 @@ def text_feature_obs(env: LiftEnv) -> torch.Tensor:
     # 最安全的方式是返回一个表示“单个环境的预期形状”的张量
     # Manager 会处理 num_envs 的批处理
     # print("[Debug current_env_target_encoded_obs] encoded_task_goal_per_env not found, returning placeholder shape.")
-        return torch.zeros((env.num_envs,env.feature_dim), dtype=torch.float32)
+        #return torch.zeros((env.num_envs,env.feature_dim), dtype=torch.float32)
+        return torch.zeros((env.num_envs,), dtype=torch.float32)
 
 def get_cubes_position(env: LiftEnv)-> torch.Tensor:
     yellow_cube_pos=object_position_in_robot_root_frame(env,object_cfg=SceneEntityCfg("yellow_object")).squeeze(-1)

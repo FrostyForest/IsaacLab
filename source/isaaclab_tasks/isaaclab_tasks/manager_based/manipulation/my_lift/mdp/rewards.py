@@ -34,9 +34,9 @@ def object_is_lifted(
     current_target_idx=env.current_target_ids_per_env#torch.Size([num_env])
 
     mapping_vectors = torch.tensor([
-    [1.0, 0.2, 0.2],  # 对应输入 0
-    [0.2, 1.0, 0.2],  # 对应输入 1
-    [0.2, 0.2, 1.0]   # 对应输入 2
+        [10.0, 1.0, 1.0],  # 对应输入 0
+        [1.0, 10.0, 1.0],  # 对应输入 1
+        [1.0, 1.0, 10.0]   # 对应输入 2
     ],device=env.device)
     if current_target_idx.dtype != torch.long:
        current_target_idx = current_target_idx.long()
@@ -76,25 +76,27 @@ def object_ee_distance(
     object2_ee_distance = torch.norm(object2_pos_w - ee_w, dim=1)
     object3_ee_distance = torch.norm(object3_pos_w - ee_w, dim=1)
 
+
     r1=1 - torch.tanh(object1_ee_distance / std)
     r2=1 - torch.tanh(object2_ee_distance / std)
     r3=1 - torch.tanh(object3_ee_distance / std)
 
     current_target_idx=env.current_target_ids_per_env#torch.Size([num_env])
 
-    mapping_vectors = torch.tensor([
-    [1.0, 0.2, 0.2],  # 对应输入 0
-    [0.2, 1.0, 0.2],  # 对应输入 1
-    [0.2, 0.2, 1.0]   # 对应输入 2
-    ],device=env.device)
-    if current_target_idx.dtype != torch.long:
-       current_target_idx = current_target_idx.long()
-    else:
-        current_target_idx = current_target_idx
-    weight_tensor=mapping_vectors[current_target_idx]
+    # mapping_vectors = torch.tensor([
+    # [1.0, 0.0, 0.0],  # 对应输入 0
+    # [0.0, 1.0, 0.0],  # 对应输入 1
+    # [0.0, 0.0, 1.0]   # 对应输入 2
+    # ],device=env.device)
+    # if current_target_idx.dtype != torch.long:
+    #    current_target_idx = current_target_idx.long()
+    # else:
+    #     current_target_idx = current_target_idx
+    # weight_tensor=mapping_vectors[current_target_idx]
     r_div=torch.stack([r1,r2,r3],dim=1)
 
-    r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
+    #r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
+    r,i=r_div.max(dim=1, keepdim=False)
 
     return r
 
@@ -129,18 +131,19 @@ def object_goal_distance(
     r3=(object3.data.root_pos_w[:, 2] > minimal_height) * (1 - torch.tanh(distance3 / std))
     current_target_idx=env.current_target_ids_per_env#torch.Size([num_env])
 
-    mapping_vectors = torch.tensor([
-    [1.0, 0.25, 0.25],  # 对应输入 0
-    [0.25, 1.0, 0.25],  # 对应输入 1
-    [0.25, 0.25, 1.0]   # 对应输入 2
-    ],device=env.device)
-    if current_target_idx.dtype != torch.long:
-       current_target_idx = current_target_idx.long()
-    else:
-        current_target_idx = current_target_idx
-    weight_tensor=mapping_vectors[current_target_idx]
+    # mapping_vectors = torch.tensor([#target序号为0，代表目标为yellow cube，。。。
+    # [1.0, 0.0, 0.0],  # 对应输入 0
+    # [0.0, 1.0, 0.0],  # 对应输入 1
+    # [0.0, 0.0, 1.0]   # 对应输入 2
+    # ],device=env.device)
+    # if current_target_idx.dtype != torch.long:
+    #    current_target_idx = current_target_idx.long()
+    # else:
+    #     current_target_idx = current_target_idx
+    # weight_tensor=mapping_vectors[current_target_idx]
     r_div=torch.stack([r1,r2,r3],dim=1)
-    r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
+    #r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
+    r,i=r_div.max(dim=1, keepdim=False)
 
     return r #shape:(n)
 

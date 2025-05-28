@@ -68,8 +68,8 @@ gym.register(
 ##
 
 gym.register(
-    id="Isaac-Lift-Cube-Franka-IK-Rel-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    id="Isaac-my_Lift-Cube-Franka-IK-Rel-v0",
+    entry_point="isaaclab_tasks.manager_based.manipulation.my_lift.lift_env:LiftEnv",
     kwargs={
         "env_cfg_entry_point": f"{__name__}.ik_rel_env_cfg:FrankaCubeLiftEnvCfg",
         "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc.json"),

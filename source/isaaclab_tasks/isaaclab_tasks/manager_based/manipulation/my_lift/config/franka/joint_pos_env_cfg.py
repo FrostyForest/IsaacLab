@@ -6,7 +6,7 @@
 from isaaclab.assets import RigidObjectCfg
 from isaaclab.sensors import FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
+from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg,MassPropertiesCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
@@ -68,7 +68,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
             init_state=RigidObjectCfg.InitialStateCfg(pos=[0.45, 0.1, 0.055], rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(
                 usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/green_block.usd",
-                scale=(0.8, 0.8, 0.8),
+                scale=(0.85, 0.85, 0.85),
                 rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
@@ -77,6 +77,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
                     max_depenetration_velocity=5.0,
                     disable_gravity=False,
                 ),
+                mass_props=MassPropertiesCfg(mass=0.3)
             ),
         )
 
@@ -85,7 +86,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
             init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, -0.05, 0.055], rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(
                 usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/red_block.usd",
-                scale=(0.8, 0.8, 0.8),
+                scale=(0.85, 0.85, 0.85),
                 rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
@@ -94,15 +95,16 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
                     max_depenetration_velocity=5.0,
                     disable_gravity=False,
                 ),
+                mass_props=MassPropertiesCfg(mass=0.3)
             ),
         )
 
         self.scene.yellow_object=RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/YellowCube",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.55, -0.2, 0.055], rot=[1, 0, 0, 0]),
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.52, -0.1, 0.055], rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(
                 usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Blocks/yellow_block.usd",
-                scale=(0.8, 0.8, 0.8),
+                scale=(0.85, 0.85, 0.85),
                 rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
@@ -111,6 +113,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
                     max_depenetration_velocity=5.0,
                     disable_gravity=False,
                 ),
+                mass_props=MassPropertiesCfg(mass=0.3)
             ),
         )
 

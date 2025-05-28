@@ -59,10 +59,8 @@ def main():
             # apply actions
             observations, reward, terminated, truncated, info =env.step(actions)
             #print(observations)
-            obs=observations['policy']
-            for key in obs.keys():
-                print(key,obs[key].shape)
-            print('end -------------------')
+            print(reward)
+            print(env.current_target_strings_per_env)
 
     # close the simulator
     env.close()

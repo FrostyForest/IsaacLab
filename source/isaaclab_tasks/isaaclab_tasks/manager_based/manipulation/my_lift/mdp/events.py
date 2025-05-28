@@ -58,7 +58,7 @@ def randomize_string_task_goal(env: LiftEnv, env_ids: torch.Tensor): # 类型提
         if hasattr(env.cfg, 'print_debug_info') and env.cfg.print_debug_info:
             print(f"Env {env_idx} new target (via event): {env.current_target_strings_per_env[env_idx]}")
 
-    inputs = env.text_processor(text=env.current_target_strings_per_env,padding="max_length", return_tensors="pt").to('cuda')
+    inputs = env.text_processor(text=env.current_target_strings_per_env,padding="max_length",max_length=64, return_tensors="pt").to('cuda')
     with torch.no_grad():
         outputs = env.siglip_text_model(**inputs)
 
