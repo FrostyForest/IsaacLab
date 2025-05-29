@@ -50,7 +50,7 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     red_object: RigidObjectCfg | DeformableObjectCfg = MISSING
     yellow_object: RigidObjectCfg | DeformableObjectCfg = MISSING
 
-    camera_1: CameraCfg = MISSING
+    #camera_1: CameraCfg = MISSING
 
     # Table
     table = AssetBaseCfg(
@@ -210,11 +210,11 @@ class RewardsCfg:
     )
 
     # action penalty
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-1e-4)
+    action_rate = RewTerm(func=mdp.my_action_rate_l2, weight=0)
 
     joint_vel = RewTerm(
-        func=mdp.joint_vel_l2,
-        weight=-1e-4,
+        func=mdp.my_joint_vel_l2,
+        weight=0,
         params={"asset_cfg": SceneEntityCfg("robot")},
     )
 

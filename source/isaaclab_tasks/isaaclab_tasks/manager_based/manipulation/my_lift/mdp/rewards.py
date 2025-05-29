@@ -8,7 +8,7 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
-from isaaclab.assets import RigidObject
+from isaaclab.assets import RigidObject,Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import FrameTransformer
 from isaaclab.utils.math import combine_frame_transforms
@@ -147,3 +147,19 @@ def object_goal_distance(
 
     return r #shape:(n)
 
+def my_action_rate_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Penalize the rate of change of the actions using L2 squared kernel."""
+    penalty=torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action), dim=1)
+    penalty=torch.clamp(penalty,max=10)
+    return penalty
+
+def my_joint_vel_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize joint velocities on the articulation using L2 squared kernel.
+
+    NOTE: Only the joints configured in :attr:`asset_cfg.joint_ids` will have their joint velocities contribute to the term.
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    p=torch.sum(torch.square(asset.data.joint_vel[:, asset_cfg.joint_ids]), dim=1)
+    p=torch.clamp(p,max=30)
+    return p
