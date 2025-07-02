@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import string
 from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils
@@ -17,14 +16,16 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import CameraCfg, ContactSensorCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import FrameTransformerCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UsdFileCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
+from isaaclab.sensors import CameraCfg, ContactSensorCfg
 from . import mdp
-from .mdp import ID_TO_TARGET, NUM_TARGETS, PREDEFINED_TARGETS, TARGET_TO_ID
+import string
+
+from .mdp import PREDEFINED_TARGETS, TARGET_TO_ID, ID_TO_TARGET, NUM_TARGETS
 
 ##
 # Scene definition
@@ -121,7 +122,7 @@ class ObservationsCfg:
             func=mdp.generated_commands, params={"command_name": "object_pose"}
         )  # target position
         actions = ObsTerm(func=mdp.last_action)
-        # image_feature = ObsTerm(func=mdp.image_feature_obs,noise=None) # 使用新的观测函数名
+        image_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
         # text_feature = ObsTerm(func=mdp.text_feature_obs,noise=None)
         rgb_obs_history = ObsTerm(func=mdp.rgb_obs, noise=None, history_length=3, flatten_history_dim=False)
         depth_obs_history = ObsTerm(func=mdp.depth_obs, noise=None, history_length=3, flatten_history_dim=False)
@@ -136,6 +137,10 @@ class ObservationsCfg:
             func=mdp.get_finger_contact_forces,
             noise=None,
             params={"sensor_cfg": SceneEntityCfg("right_finger_contactsensor")},
+        )
+        object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
+        yellow_cube_pos = ObsTerm(
+            func=mdp.object_position_in_robot_root_frame, params={"object_cfg": SceneEntityCfg("yellow_object")}
         )
 
         # ------- obs shape

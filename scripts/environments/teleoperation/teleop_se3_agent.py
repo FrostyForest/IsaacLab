@@ -45,6 +45,7 @@ from isaaclab.devices import Se3Gamepad, Se3HandTracking, Se3Keyboard, Se3SpaceM
 from isaaclab.envs import ViewerCfg
 from isaaclab.envs.ui import ViewportCameraController
 from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.managers import SceneEntityCfg
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
@@ -78,7 +79,9 @@ def main():
         # set the resampling time range to large number to avoid resampling
         env_cfg.commands.object_pose.resampling_time_range = (1.0e9, 1.0e9)
         # add termination condition for reaching the goal otherwise the environment won't reset
-        env_cfg.terminations.object_reached_goal = DoneTerm(func=mdp.object_reached_goal)
+        env_cfg.terminations.object_reached_goal = DoneTerm(
+            func=mdp.object_reached_goal, params={"object_cfg": SceneEntityCfg("yellow_object")}
+        )
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
     # check environment name (for reach , we don't allow the gripper)

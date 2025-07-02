@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 import torch
+
 from typing import TYPE_CHECKING, Tuple
 
 from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.utils.math import subtract_frame_transforms
+from isaaclab.utils.math import subtract_frame_transforms, quat_apply
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -37,6 +38,7 @@ def object_position_in_robot_root_frame(
     object_pos_b, _ = subtract_frame_transforms(
         robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], object_pos_w
     )
+    print(object_cfg.name, object_pos_b)
     return object_pos_b
 
 
@@ -183,3 +185,168 @@ def get_finger_contact_forces(env: LiftEnv, sensor_cfg: SceneEntityCfg) -> torch
     force_magnitude = torch.norm(force_vector_on_finger, dim=-1, keepdim=False)  # Shape: (num_envs, 1)
 
     return force_magnitude
+
+
+def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    # 首先要计算camera的位姿
+    robot: RigidObject = env.scene[robot_cfg.name]
+    camera = env.scene["camera_1"]
+    camera_pos_w = camera.data.pos_w[:, :3]
+    camera_rot_w = camera.data.quat_w_world
+    camera_pos_b, camera_rot_b = subtract_frame_transforms(
+        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], camera_pos_w, camera_rot_w
+    )
+    # 获取深度图
+    raw_depth_data = image(env, sensor_cfg=SceneEntityCfg("camera_1"), data_type="depth", normalize=True)  # 单位米
+
+    # 获取中点的深度
+    # 3. 计算中点坐标
+    batch_size, img_height, img_width, _ = raw_depth_data.shape
+    center_y = img_height // 2  # 结果是 128
+    center_x = img_width // 2  # 结果是 128
+    midpoint_coords = torch.tensor([center_x, center_y]).to("cuda").repeat(batch_size, 1)
+    # 注意：PyTorch/NumPy 的索引通常是 [row, column]，对应 [height, width]
+
+    # 4. 进行索引以获取中点的深度值
+    #    选择所有环境 (:)
+    #    在 height 维度上选择 center_y
+    #    在 width 维度上选择 center_x
+    #    在 channel 维度上选择 0
+    center_depth_values = raw_depth_data[:, center_y, center_x, 0]
+    # print(center_depth_values,center_depth_values.shape)
+
+    def get_point_in_robot_frame_from_pixel(
+        pixel_coords: torch.Tensor,  # shape: (N, 2) or (2,)
+        pixel_depth: torch.Tensor,  # shape: (N,) or scalar
+        # camera_intrinsics: torch.Tensor,# shape: (N, 3, 3) or (3, 3)
+        camera_pos_in_robot_frame: torch.Tensor,  # shape: (N, 3)
+        camera_rot_in_robot_frame: torch.Tensor,  # shape: (N, 4)
+        image_height,
+        image_width,
+    ) -> torch.Tensor:
+        """
+        Converts a pixel coordinate with its depth value to a 3D point in the robot's root frame.
+        """
+        # 确保输入是批处理的张量
+        if pixel_coords.ndim == 1:
+            pixel_coords = pixel_coords.unsqueeze(0)
+        if pixel_depth.ndim == 0:
+            pixel_depth = pixel_depth.unsqueeze(0)
+        if camera_pos_in_robot_frame.ndim == 1:
+            camera_pos_in_robot_frame = camera_pos_in_robot_frame.unsqueeze(0)
+        if camera_rot_in_robot_frame.ndim == 1:
+            camera_rot_in_robot_frame = camera_rot_in_robot_frame.unsqueeze(0)
+
+        # 1. 反投影到相机坐标系
+        fx = 1462.857142857143
+        fy = 1462.857142857143
+        cx = image_width // 2
+        cy = image_height // 2
+
+        u = pixel_coords[:, 0]
+        v = pixel_coords[:, 1]
+        d = pixel_depth
+
+        z_c = d
+        x_c = (u - cx) * z_c / fx
+        y_c = (v - cy) * z_c / fy
+
+        point_pos_c = torch.stack([x_c, y_c, z_c], dim=1)  # 物体在camera坐标系的位置
+        print("物体在camera坐标系的位置", point_pos_c)
+
+        # 2. 变换到机器人基座坐标系
+        rotated_point = quat_apply(camera_rot_in_robot_frame, point_pos_c)
+        point_pos_b = rotated_point + camera_pos_in_robot_frame
+
+        return point_pos_b, point_pos_c
+
+    def transform_points_from_camera_to_world_batch(
+        pts_cam: torch.Tensor, cam_pos_in_world: torch.Tensor, cam_quat_in_world: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        批量将相机坐标系下的点，变换到世界坐标系。
+
+        参数:
+        pts_cam (torch.Tensor): 形状为 [N, 3] 的点坐标张量。
+        cam_pos_in_world (torch.Tensor): 形状为 [N, 3] 的相机位置张量。
+        cam_quat_in_world (torch.Tensor): 形状为 [N, 4] 的相机姿态四元数 (w, x, y, z) 张量。
+
+        返回:
+        torch.Tensor: 形状为 [N, 3] 的点在世界坐标系下的坐标张量。
+        """
+        N = pts_cam.shape[0]
+        device = pts_cam.device
+
+        # --- Step 1: 批量从位姿构建 c2w 矩阵 ---
+
+        # 1. 批量归一化四元数
+        # 使用 F.normalize 来确保所有四元数都是单位的
+        q = torch.nn.functional.normalize(cam_quat_in_world, p=2, dim=1)
+
+        # 提取 w, x, y, z 分量，每个都是 [N] 的向量
+        w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+
+        # 2. 批量计算旋转矩阵 R_c2w
+        # 创建一个 [N, 3, 3] 的零矩阵来存储所有旋转矩阵
+        R_c2w = torch.zeros((N, 3, 3), device=device)
+
+        # 利用张量操作，一次性计算所有矩阵的元素
+        R_c2w[:, 0, 0] = 1 - 2 * (y**2 + z**2)
+        R_c2w[:, 0, 1] = 2 * (x * y - w * z)
+        R_c2w[:, 0, 2] = 2 * (x * z + w * y)
+
+        R_c2w[:, 1, 0] = 2 * (x * y + w * z)
+        R_c2w[:, 1, 1] = 1 - 2 * (x**2 + z**2)
+        R_c2w[:, 1, 2] = 2 * (y * z - w * x)
+
+        R_c2w[:, 2, 0] = 2 * (x * z - w * y)
+        R_c2w[:, 2, 1] = 2 * (y * z + w * x)
+        R_c2w[:, 2, 2] = 1 - 2 * (x**2 + y**2)
+
+        # 3. 批量组装 c2w 矩阵
+        # 创建一个 [N, 4, 4] 的单位矩阵批次
+        c2w = torch.eye(4, device=device).unsqueeze(0).repeat(N, 1, 1)
+
+        c2w[:, :3, :3] = R_c2w
+        # .unsqueeze(-1) 是为了将 [N, 3] 的平移向量变成 [N, 3, 1] 以便赋值
+        c2w[:, :3, 3] = cam_pos_in_world
+
+        # --- Step 2: 批量变换点 ---
+
+        # 1. 批量将点转换为齐次坐标
+        # 创建一个 [N, 1] 的1向量
+        ones = torch.ones((N, 1), device=device)
+        # 拼接后得到 [N, 4] 的齐次坐标点
+        pts_cam_h = torch.cat([pts_cam, ones], dim=1)
+
+        # 2. 应用 c2w 变换
+        # 为了使用批量矩阵乘法，我们需要将 pts_cam_h 的形状调整为 [N, 4, 1]
+        # c2w 的形状是 [N, 4, 4]
+        # 结果 pts_world_h 的形状将是 [N, 4, 1]
+        pts_world_h = torch.bmm(c2w, pts_cam_h.unsqueeze(-1))
+
+        # 3. 返回世界坐标系下的三维坐标
+        # .squeeze(-1) 去掉最后的维度，然后取前三维
+        return pts_world_h.squeeze(-1)[:, :3]
+
+    object_pos, pixel_pos_camera = get_point_in_robot_frame_from_pixel(
+        pixel_coords=midpoint_coords,
+        pixel_depth=center_depth_values,
+        camera_pos_in_robot_frame=camera_pos_b,
+        camera_rot_in_robot_frame=camera_rot_b,
+        image_height=img_height,
+        image_width=img_width,
+    )
+    # 应该有问题
+    point_pos_world = transform_points_from_camera_to_world_batch(
+        pts_cam=pixel_pos_camera, cam_pos_in_world=camera_pos_w, cam_quat_in_world=camera_rot_w
+    )
+    print("point_pos_world", point_pos_world)
+    print("robot_pos_world", robot.data.root_state_w[:, :3])
+    object_pos_b, _ = subtract_frame_transforms(
+        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], point_pos_world
+    )
+    print("predict object pose in root", object_pos.shape, object_pos)  # 相比point_pos_world没变化
+    print("predict object pose2 in root", object_pos_b.shape, object_pos_b)
+    print("camera pose in root", camera_pos_b)  # 应该正确
+    return object_pos

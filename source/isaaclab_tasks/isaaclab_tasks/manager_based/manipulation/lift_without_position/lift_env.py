@@ -43,7 +43,7 @@ class LiftEnv(ManagerBasedRLEnv):
         # 1. 调用父类的 __init__，这是至关重要的第一步
         #    父类的 __init__ 会处理场景的创建、管理器的设置等。
         #    在 super().__init__(cfg) 完成后，self.num_envs, self.device 等属性才可用。
-        super().__init__(cfg)
+        super().__init__(cfg, **kwargs)
 
         # 你可以在这里执行一些一次性的设置，如果它们依赖于完全初始化的环境
         # 但不适合放在事件中的逻辑（例如，只在环境对象创建时做一次的事情）

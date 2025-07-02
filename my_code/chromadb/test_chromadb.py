@@ -8,7 +8,7 @@ import time
 import torch
 import uuid
 from transformers import AutoModel, AutoProcessor, AutoTokenizer, Siglip2TextModel, Siglip2VisionModel
-
+from transformers.image_utils import load_image
 import chromadb
 import open_clip
 from chromadb.config import Settings
@@ -41,7 +41,6 @@ def process_new_observation(new_embedding, new_position):
         # 为简单起见，我们假设距离越小越好，设定一个距离阈值
         DISTANCE_THRESHOLD = 0.3  # 这个值需要实验确定
         distance = results["distances"][0][0]
-        print(results["embeddings"])
         old_embedding = results["embeddings"][0][0]
         dot_product = np.dot(new_embedding, old_embedding)
         # 2. 计算每个向量的 L2 范数 (模长)
@@ -91,17 +90,17 @@ siglip_text_model = Siglip2TextModel.from_pretrained(clip_path, device_map="auto
 text_processor = AutoTokenizer.from_pretrained(clip_path, device_map="auto")
 
 image = image_processor(
-    images=Image.open("my_code/segment_anything/output_objects/object_3.png"), max_num_patches=64, return_tensors="pt"
+    images=load_image("my_code/segment_anything/output_objects/object_3.png"), max_num_patches=64, return_tensors="pt"
 ).to("cuda")
 tokenizer = open_clip.get_tokenizer("TULIP-B-16-224")
 text = text_processor(
-    text=["a yellow cube", "yellow_cube", "a bird"], padding="max_length", max_length=64, return_tensors="pt"
+    text=["a yellow cube", "yellow_cube", "a red cube"], padding="max_length", max_length=64, return_tensors="pt"
 ).to("cuda")
 image2 = image_processor(
-    images=Image.open("my_code/segment_anything/output_objects/object_2.png"), max_num_patches=64, return_tensors="pt"
+    images=load_image("my_code/segment_anything/output_objects/object_2.png"), max_num_patches=64, return_tensors="pt"
 ).to("cuda")
 image3 = image_processor(
-    images=Image.open("my_code/segment_anything/output_objects/object_8.png"), max_num_patches=64, return_tensors="pt"
+    images=load_image("my_code/segment_anything/output_objects/object_8.png"), max_num_patches=64, return_tensors="pt"
 ).to("cuda")
 
 with torch.no_grad(), torch.autocast("cuda"):
@@ -114,7 +113,8 @@ with torch.no_grad(), torch.autocast("cuda"):
     f2 = text_features[2]
 
 
-process_new_observation(image_features, 0)
-process_new_observation(image_features2, 1)
+process_new_observation(image_features2, 0)
+process_new_observation(image_features3, 1)
 # process_new_observation(image_features3,2)
-find_item_by_text(image_features3)
+process_new_observation(image_features, 2)
+find_item_by_text(f0)
