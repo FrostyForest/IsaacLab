@@ -122,7 +122,7 @@ class ObservationsCfg:
             func=mdp.generated_commands, params={"command_name": "object_pose"}
         )  # target position
         actions = ObsTerm(func=mdp.last_action)
-        image_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
+        # image_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
         # text_feature = ObsTerm(func=mdp.text_feature_obs,noise=None)
         rgb_obs_history = ObsTerm(func=mdp.rgb_obs, noise=None, history_length=3, flatten_history_dim=False)
         depth_obs_history = ObsTerm(func=mdp.depth_obs, noise=None, history_length=3, flatten_history_dim=False)

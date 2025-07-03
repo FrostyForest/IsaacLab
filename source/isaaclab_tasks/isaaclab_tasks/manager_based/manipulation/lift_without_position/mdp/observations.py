@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from transformers import AutoProcessor
 
 from isaaclab.sensors import ContactSensor, ContactSensorCfg, FrameTransformer
+from isaaclab.utils.math import transform_points, unproject_depth
 
 from . import image
 from .string_target import ID_TO_TARGET, NUM_TARGETS, PREDEFINED_TARGETS, TARGET_TO_ID
@@ -192,7 +193,7 @@ def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = Sc
     robot: RigidObject = env.scene[robot_cfg.name]
     camera = env.scene["camera_1"]
     camera_pos_w = camera.data.pos_w[:, :3]
-    camera_rot_w = camera.data.quat_w_world
+    camera_rot_w = camera.data.quat_w_ros
     camera_pos_b, camera_rot_b = subtract_frame_transforms(
         robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], camera_pos_w, camera_rot_w
     )
@@ -346,7 +347,16 @@ def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = Sc
     object_pos_b, _ = subtract_frame_transforms(
         robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], point_pos_world
     )
+
+    points_3d_cam = unproject_depth(camera.data.output["depth"], camera.data.intrinsic_matrices)
+    points_3d_world = transform_points(points_3d_cam, camera.data.pos_w, camera.data.quat_w_ros)
+
     print("predict object pose in root", object_pos.shape, object_pos)  # 相比point_pos_world没变化
     print("predict object pose2 in root", object_pos_b.shape, object_pos_b)
     print("camera pose in root", camera_pos_b)  # 应该正确
+    print("camera pose in world", camera_pos_w)
+    print("camera rot in root", camera_rot_b)
+    print("camera rot in world", camera_rot_w)
+    print("robot rot in world", robot.data.root_state_w[:, 3:7])
+    print("point in world", points_3d_world[:, :3])
     return object_pos

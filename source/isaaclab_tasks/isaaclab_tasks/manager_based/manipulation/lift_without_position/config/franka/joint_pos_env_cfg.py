@@ -140,8 +140,8 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         self.scene.camera_1 = CameraCfg(
             prim_path="{ENV_REGEX_NS}/Robot/panda_link7/front_cam",
             update_period=0.1,
-            height=480,
-            width=640,
+            height=256,  # 480,
+            width=256,  # 640,
             data_types=["rgb", "depth"],
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
@@ -197,14 +197,14 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
             ],
         )
 
-        self.observation_space = {
-            "joint_pos": 9,
-            "joint_vel": 9,
-            "ee_position": 3,
-            #'object_position':9,
-            "target_object_position": 7,
-            "actions": 8,
-        }
+        # self.observation_space = {
+        #     "joint_pos": 9,
+        #     "joint_vel": 9,
+        #     "ee_position": 3,
+        #     #'object_position':9,
+        #     "target_object_position": 7,
+        #     "actions": 8,
+        # }
 
 
 @configclass
