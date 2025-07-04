@@ -338,25 +338,25 @@ def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = Sc
         image_height=img_height,
         image_width=img_width,
     )
-    # 应该有问题
-    point_pos_world = transform_points_from_camera_to_world_batch(
-        pts_cam=pixel_pos_camera, cam_pos_in_world=camera_pos_w, cam_quat_in_world=camera_rot_w
-    )
-    print("point_pos_world", point_pos_world)
-    print("robot_pos_world", robot.data.root_state_w[:, :3])
-    object_pos_b, _ = subtract_frame_transforms(
-        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], point_pos_world
-    )
 
-    points_3d_cam = unproject_depth(camera.data.output["depth"], camera.data.intrinsic_matrices)
-    points_3d_world = transform_points(points_3d_cam, camera.data.pos_w, camera.data.quat_w_ros)
+    # 第二种方法算点的坐标
+    # point_pos_world = transform_points_from_camera_to_world_batch(
+    #     pts_cam=pixel_pos_camera, cam_pos_in_world=camera_pos_w, cam_quat_in_world=camera_rot_w
+    # )
+    # object_pos_b, _ = subtract_frame_transforms(
+    #     robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], point_pos_world
+    # )
 
-    print("predict object pose in root", object_pos.shape, object_pos)  # 相比point_pos_world没变化
-    print("predict object pose2 in root", object_pos_b.shape, object_pos_b)
-    print("camera pose in root", camera_pos_b)  # 应该正确
-    print("camera pose in world", camera_pos_w)
-    print("camera rot in root", camera_rot_b)
-    print("camera rot in world", camera_rot_w)
-    print("robot rot in world", robot.data.root_state_w[:, 3:7])
-    print("point in world", points_3d_world[:, :3])
+    # 第三种方法算点的坐标
+    # points_3d_cam = unproject_depth(camera.data.output["depth"], camera.data.intrinsic_matrices)
+    # points_3d_world = transform_points(points_3d_cam, camera.data.pos_w, camera.data.quat_w_ros)
+
+    # print("predict object pose in root", object_pos.shape, object_pos)  # 相比point_pos_world没变化
+    # print("predict object pose2 in root", object_pos_b.shape, object_pos_b)
+    # print("camera pose in root", camera_pos_b)  # 应该正确
+    # print("camera pose in world", camera_pos_w)
+    # print("camera rot in root", camera_rot_b)
+    # print("camera rot in world", camera_rot_w)
+    # print("robot rot in world", robot.data.root_state_w[:, 3:7])
+    # print("point in world", points_3d_world[:, :3])
     return object_pos

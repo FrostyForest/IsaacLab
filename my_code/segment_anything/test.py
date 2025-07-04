@@ -8,7 +8,10 @@ import os
 import torch
 
 import cv2
-from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
+from segment_anything_fast import SamAutomaticMaskGenerator, sam_model_registry
+from torchvision.io import read_image
+from torchvision.transforms import functional as F
+import time
 
 # --- 1. 设置 ---
 # 输入图片路径
@@ -32,7 +35,7 @@ sam.to(device=device)
 
 # SamAutomaticMaskGenerator可以调整很多参数来优化分割效果
 # 详见官方文档: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/automatic_mask_generator.py
-mask_generator = SamAutomaticMaskGenerator(sam)
+mask_generator = SamAutomaticMaskGenerator(sam, pred_iou_thresh=0.99, points_per_batch=64)
 
 # --- 3. 读取图像并生成蒙版 ---
 print("正在读取图像...")
@@ -45,11 +48,14 @@ if image_bgr is None:
 # 将图像从BGR转换为RGB，因为SAM需要RGB格式
 image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
+
 print("正在生成所有对象的蒙版...")
+t1 = time.time()
 # generate会返回一个列表，每个元素是一个字典，包含一个分割对象的信息
 masks = mask_generator.generate(image_rgb)
 print(f"完成！共找到 {len(masks)} 个对象。")
-
+t1_1 = time.time()
+print("mask time", t1_1 - t1)
 # --- 4. 遍历蒙版，抠图并保存 ---
 print("正在处理并保存每个对象...")
 # 按面积从大到小排序，可以优先处理主要物体
@@ -76,17 +82,19 @@ for i, mask_data in enumerate(sorted_masks):
     # --- 裁剪图像以减少空白区域 ---
     # 获取边界框信息 [x, y, width, height]
     x, y, w, h = mask_data["bbox"]
+    x, y, w, h = int(x), int(y), int(w), int(h)
     # 根据边界框裁剪图像
     cropped_image = output_image[y : y + h, x : x + w, :]
 
-    # --- 保存裁剪后的图像 ---
-    # 定义输出文件名
-    filename = os.path.join(OUTPUT_DIR, f"object_{i+1}.png")
+    # # --- 保存裁剪后的图像 ---
+    # # 定义输出文件名
+    # filename = os.path.join(OUTPUT_DIR, f"object_{i+1}.png")
 
-    # OpenCV在写入时需要BGRA格式，所以需要从RGBA转换
-    cropped_image_bgra = cv2.cvtColor(cropped_image, cv2.COLOR_RGBA2BGRA)
+    # # OpenCV在写入时需要BGRA格式，所以需要从RGBA转换
+    # cropped_image_bgra = cv2.cvtColor(cropped_image, cv2.COLOR_RGBA2BGRA)
 
-    # 保存为PNG文件以保留透明度
-    cv2.imwrite(filename, cropped_image_bgra)
-
+    # # 保存为PNG文件以保留透明度
+    # cv2.imwrite(filename, cropped_image_bgra)
+t2 = time.time()
+print("cost time", t2 - t1)
 print(f"所有对象已成功保存到 '{OUTPUT_DIR}' 文件夹中。")
