@@ -67,6 +67,7 @@ _build
 *.model
 *.ckpt
 *.pth
+*.pt
 
 # 忽略所有名为 "runs" 的文件夹
 runs/
