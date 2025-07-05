@@ -13,6 +13,7 @@ from .lift_env_cfg import LiftEnvCfg  # 导入你的配置类
 
 # 假设 PREDEFINED_TARGETS 等定义在 mdp.string_target_defs 或类似地方
 from .mdp import ID_TO_TARGET, NUM_TARGETS, PREDEFINED_TARGETS, TARGET_TO_ID
+from fastsam import FastSAM, FastSAMPrompt
 
 
 class LiftEnv(ManagerBasedRLEnv):
@@ -40,10 +41,13 @@ class LiftEnv(ManagerBasedRLEnv):
         self.image_processor = AutoProcessor.from_pretrained(self.clip_path, device_map="auto")
         self.siglip_text_model = Siglip2TextModel.from_pretrained(self.clip_path, device_map="auto").eval()
         self.text_processor = AutoTokenizer.from_pretrained(self.clip_path, device_map="auto")
+
+        self.sam_model = FastSAM("/home/linhai/code/IsaacLab/my_code/fast_sam/FastSAM-x.pt")  # 确保路径正确
         # 1. 调用父类的 __init__，这是至关重要的第一步
         #    父类的 __init__ 会处理场景的创建、管理器的设置等。
         #    在 super().__init__(cfg) 完成后，self.num_envs, self.device 等属性才可用。
         super().__init__(cfg, **kwargs)
+        self.sam_model.to(cfg.sim.device)
 
         # 你可以在这里执行一些一次性的设置，如果它们依赖于完全初始化的环境
         # 但不适合放在事件中的逻辑（例如，只在环境对象创建时做一次的事情）
