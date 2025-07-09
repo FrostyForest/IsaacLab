@@ -70,3 +70,24 @@ def randomize_string_task_goal(env: LiftEnv, env_ids: torch.Tensor):  # 类型�
         outputs = env.siglip_text_model(**inputs)
 
     env.current_target_state_per_env = outputs.pooler_output  # pooled features
+
+
+def reset_database(env: LiftEnv, env_ids: torch.Tensor):
+    """
+    Deletes all items from the ChromaDB collection that belong to the specified environment IDs.
+
+    This is typically called in the environment's _reset_idx method.
+    """
+    # 检查是否有需要重置的环境
+    if env_ids.numel() == 0:
+        return
+
+    # 将 env_ids 转换为 Python 的 list，因为 ChromaDB 的 $in 操作符需要它
+    env_ids_list = env_ids.cpu().tolist()
+
+    # 直接使用 where 子句来删除所有匹配的条目
+    # 这只需要一次数据库交互，更高效
+    env.collection.delete(where={"env_id": {"$in": env_ids_list}})
+
+    # 你可以加上日志来确认操作
+    # print(f"ChromaDB: Deleted all items for env_ids: {env_ids_list}")

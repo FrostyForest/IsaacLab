@@ -245,7 +245,7 @@ agent = PPO(
 
 
 # configure and instantiate the RL trainer
-cfg_trainer = {"timesteps": 67200, "headless": True}
+cfg_trainer = {"timesteps": 67200, "headless": True, "environment_info": "log"}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
 # path = '/home/linhai/code/IsaacLab/runs/torch/Isaac-my_Lift-Cube-Franka-IK-Rel-v1/25-07-01_14-41-03-440280_PPO/checkpoints/best_agent.pt'
 # agent.load(path)

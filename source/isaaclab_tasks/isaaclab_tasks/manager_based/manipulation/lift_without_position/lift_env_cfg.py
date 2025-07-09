@@ -53,7 +53,7 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     # bottle: RigidObjectCfg | DeformableObjectCfg = MISSING
 
     camera_1: CameraCfg = MISSING
-    # camera_2: CameraCfg = MISSING
+    camera_2: CameraCfg = MISSING
     left_finger_contactsensor: ContactSensorCfg = MISSING
     right_finger_contactsensor: ContactSensorCfg = MISSING
     # Table
@@ -124,9 +124,9 @@ class ObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         # image_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
         # text_feature = ObsTerm(func=mdp.text_feature_obs,noise=None)
-        rgb_obs_history = ObsTerm(func=mdp.rgb_obs, noise=None, history_length=3, flatten_history_dim=False)
-        depth_obs_history = ObsTerm(func=mdp.depth_obs, noise=None, history_length=3, flatten_history_dim=False)
-        rgb_obs = ObsTerm(func=mdp.rgb_obs, noise=None)
+        # rgb_obs_history = ObsTerm(func=mdp.rgb_obs, noise=None, history_length=3, flatten_history_dim=False)
+        # depth_obs_history = ObsTerm(func=mdp.depth_obs, noise=None, history_length=3, flatten_history_dim=False)
+        # rgb_obs = ObsTerm(func=mdp.rgb_obs, noise=None)
         depth_obs = ObsTerm(func=mdp.depth_obs, noise=None)
         contact_force_left_finger = ObsTerm(
             func=mdp.get_finger_contact_forces,
@@ -138,10 +138,11 @@ class ObservationsCfg:
             noise=None,
             params={"sensor_cfg": SceneEntityCfg("right_finger_contactsensor")},
         )
-        object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
-        yellow_cube_pos = ObsTerm(
+        # object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
+        object_position = ObsTerm(
             func=mdp.object_position_in_robot_root_frame, params={"object_cfg": SceneEntityCfg("yellow_object")}
         )
+        rgb_feature = ObsTerm(func=mdp.rgb_feature)
 
         # ------- obs shape
         """
@@ -213,6 +214,13 @@ class EventCfg:
         # 通常会作用于所有环境 (env_ids=None 效果)
     )
 
+    # reset_database=EventTerm(
+    #     func=mdp.reset_database,  # 使用我们新创建的函数
+    #     mode="reset",  # 确保它在环境重置时被调用
+    #     # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
+    #     # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
+    # )
+
     # reset_bottle_position = EventTerm(
     #     func=mdp.reset_root_state_uniform,
     #     mode="reset",
@@ -225,12 +233,12 @@ class EventCfg:
 
 
 @configclass
-class RewardsCfg:
+class RewardsCfg:  # 记录的结果是乘了weight之后
     """Reward terms for the MDP."""
 
-    reaching_object = RewTerm(func=mdp.object_ee_distance, params={"std": 0.1}, weight=0.75)
+    reaching_object = RewTerm(func=mdp.object_ee_distance, params={"std": 0.1}, weight=0.075)
 
-    lifting_object = RewTerm(func=mdp.object_is_lifted, params={"minimal_height": 0.04}, weight=10.0)
+    lifting_object = RewTerm(func=mdp.object_is_lifted, params={"minimal_height": 0.04}, weight=20)
 
     object_goal_tracking = RewTerm(
         func=mdp.object_goal_distance,
@@ -254,7 +262,12 @@ class RewardsCfg:
 
     touching_object = RewTerm(
         func=mdp.touch_object,
-        weight=2,
+        weight=0.5,
+    )
+
+    test_reward = RewTerm(
+        func=mdp.test_reward,
+        weight=10,
     )
 
 

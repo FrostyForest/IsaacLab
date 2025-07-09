@@ -46,7 +46,7 @@ def object_is_lifted(
     r_div = torch.stack([r1, r2, r3], dim=1)
 
     r = torch.sum(torch.mul(weight_tensor, r_div), dim=-1).squeeze(-1)
-    print("lift reward", r)
+    # print("lift reward", r)
 
     return r
 
@@ -257,3 +257,36 @@ def touch_object(
 
     reward = torch.mul(r, reward)
     return reward
+
+
+@torch.no_grad()
+def lift_ratio_obs(
+    env: LiftEnv, minimal_height: float, object_cfg: SceneEntityCfg = SceneEntityCfg("object")
+) -> torch.Tensor:
+    """Reward the agent for lifting the object above the minimal height."""
+
+    object1: RigidObject = env.scene["yellow_object"]
+    object2: RigidObject = env.scene["green_object"]
+    object3: RigidObject = env.scene["red_object"]
+
+    r1 = torch.where(object1.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
+    r2 = torch.where(object2.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
+    r3 = torch.where(object3.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
+
+    current_target_idx = env.current_target_ids_per_env  # torch.Size([num_env])
+
+    mapping_vectors = torch.tensor(
+        [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=env.device  # 对应输入 0  # 对应输入 1  # 对应输入 2
+    )
+    if current_target_idx.dtype != torch.long:
+        current_target_idx = current_target_idx.long()
+    else:
+        current_target_idx = current_target_idx
+    weight_tensor = mapping_vectors[current_target_idx]
+
+    r_div = torch.stack([r1, r2, r3], dim=1)
+
+    r = torch.sum(torch.mul(weight_tensor, r_div), dim=-1).squeeze(-1)
+    # print("lift reward", r)
+
+    return r

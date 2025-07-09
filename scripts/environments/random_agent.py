@@ -34,6 +34,7 @@ import torch
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
+import pprint
 
 
 def main():
@@ -57,8 +58,10 @@ def main():
             # sample actions from -1 to 1
             actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
             # apply actions
-            observations, reward, terminated, truncated, info =env.step(actions)
-            #print(observations)
+            observations, reward, terminated, truncated, info = env.step(actions)
+            # print(observations)
+            pprint.pprint(info)
+
     # close the simulator
     env.close()
 

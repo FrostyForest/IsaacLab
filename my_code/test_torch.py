@@ -1,19 +1,11 @@
-import torch.nn as nn
+import sys
+import os
 import torch
-net=nn.Sequential(
-            nn.Conv2d(in_channels=6,out_channels=12,kernel_size=3,stride=1,padding='same'),
-            nn.ELU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(in_channels=12, out_channels=18, kernel_size=3, stride=1, padding='same'),
-            nn.ELU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(in_channels=18, out_channels=24, kernel_size=5, stride=3, padding='valid'),
-            nn.Flatten(),
-            nn.LayerNorm(384),
-            nn.ELU(),
-            nn.Linear(in_features=384,out_features=10)
-        )
 
-test_t=torch.randn(10,6,64,64)
-result=net(test_t)
-print(result.shape)
+
+t = torch.tensor([[1, 2], [3, 4], [5, 6], [7, 8]])
+print(t.shape)
+t2 = t.reshape(2, 2, 2)
+t3 = t2.permute(1, 0, 2)
+t4 = t3.contiguous().reshape(2, 4)
+print(t4)

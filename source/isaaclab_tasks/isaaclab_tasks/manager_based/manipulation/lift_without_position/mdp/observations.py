@@ -28,6 +28,7 @@ from .string_target import ID_TO_TARGET, NUM_TARGETS, PREDEFINED_TARGETS, TARGET
 import cv2
 from fastsam import FastSAM, FastSAMPrompt
 import numpy as np
+import json
 
 
 def object_position_in_robot_root_frame(
@@ -42,7 +43,7 @@ def object_position_in_robot_root_frame(
     object_pos_b, _ = subtract_frame_transforms(
         robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], object_pos_w
     )
-    print(object_cfg.name, object_pos_b)
+    # print(object_cfg.name, object_pos_b)
     return object_pos_b
 
 
@@ -100,19 +101,23 @@ def rgb_obs(env: LiftEnv) -> torch.Tensor:
     return downsampled_tensor_first
 
 
+@torch.no_grad()
 def depth_obs(env: LiftEnv) -> torch.Tensor:
-    raw_image_data = image(
+    raw_image_data1 = image(
         env, sensor_cfg=SceneEntityCfg("camera_1"), data_type="depth", normalize=True
-    )  # torch.Size([1, 256, 256, 3])
-    downsampled_nearest = F.interpolate(
-        raw_image_data.permute(0, 3, 1, 2),  # 改成channel first
-        scale_factor=0.5,
-        mode="nearest",  # 关键点：使用 'nearest'
-    ).permute(
-        0, 2, 3, 1
-    )  # 该会channel last
+    )  # torch.Size([1, 256, 256, 1])
+    raw_image_data2 = image(
+        env, sensor_cfg=SceneEntityCfg("camera_2"), data_type="depth", normalize=True
+    )  # torch.Size([1, 256, 256, 1])
+    # downsampled_nearest = F.interpolate(
+    #     raw_image_data.permute(0, 3, 1, 2),  # 改成channel first
+    #     scale_factor=0.5,
+    #     mode="nearest",  # 关键点：使用 'nearest'
+    # ).permute(
+    #     0, 2, 3, 1
+    # )  # 该会channel last
 
-    return downsampled_nearest
+    return torch.cat([raw_image_data1, raw_image_data2], dim=-1)
 
 
 def text_feature_obs(env: LiftEnv) -> torch.Tensor:
@@ -294,7 +299,7 @@ def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = Sc
             flat_embeddings = outputs.pooler_output  # (Total_Objects, embedding_dim)
 
         all_embeddings_in_batch = []  # 列表的列表，外层对应环境，内层对应每个物体
-        all_positions_in_batch = []
+        all_positions_in_batch = []  # (n_env,n_obj,3)
 
         # --- 5. 重新组合 Embedding 并计算位置 ---
         # 根据 encoding_map 将扁平化的 embedding 重新分配回每个环境
@@ -364,8 +369,21 @@ def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = Sc
             all_embeddings_in_batch.append(torch.stack(env_embeddings))
             all_positions_in_batch.append(points_pos_b)
 
-        print(all_embeddings_in_batch[0].shape)
-        print(all_positions_in_batch[0].shape)
+        # print(all_embeddings_in_batch[0].shape)
+        # print(all_positions_in_batch[0].shape)
+        update_object_database_with_chromadb(
+            env, all_embeddings_in_batch=all_embeddings_in_batch, all_positions_in_batch=all_positions_in_batch
+        )
+
+    pos_list = []
+    for env_id in range(batch_size):
+        text_embedding = env.current_target_state_per_env[env_id].cpu().numpy()
+        pos = torch.from_numpy(find_item_by_text(env, text_embedding=text_embedding, env_id=env_id))
+        pos_list.append(pos)
+
+    object_position = torch.stack(pos_list).to(env.device)
+    # print('object position shape',object_position.shape)
+    # print(object_position)
 
     # center_y = img_height // 2
     # center_x = img_width // 2
@@ -409,7 +427,28 @@ def calcualte_object_pos_from_depth(env: LiftEnv, robot_cfg: SceneEntityCfg = Sc
     # print("camera rot in world", camera_rot_w)
     # print("robot rot in world", robot.data.root_state_w[:, 3:7])
     # print("point in world", points_3d_world[:, :3])
-    return torch.tensor([0]).to("cuda")
+    return object_position
+
+
+@torch.no_grad()
+def rgb_feature(env: LiftEnv):
+    raw_image_data1 = image(env, sensor_cfg=SceneEntityCfg("camera_1"), data_type="rgb", normalize=False).permute(
+        0, 3, 1, 2
+    )
+    raw_image_data2 = image(env, sensor_cfg=SceneEntityCfg("camera_2"), data_type="rgb", normalize=False).permute(
+        0, 3, 1, 2
+    )
+    input_tensor = env.rgb_processor(torch.cat([raw_image_data1, raw_image_data2], dim=0))
+
+    # ----------------- 3. 提取特征 -----------------
+    # 使用 torch.no_grad() 来禁用梯度计算，节省内存和计算资源
+    with torch.no_grad():
+        features = env.rgb_extractor(input_tensor)
+    features = features.reshape(2, -1, 1280)
+    features = features.permute(1, 0, 2)
+    features = features.contiguous().reshape(-1, 2 * 1280)
+    # print(features.shape)
+    return features
 
 
 ##--------------以下是工具函数-----------------
@@ -557,3 +596,131 @@ def letterbox_tensor(
     if was_3d:
         im = im.squeeze(0)
     return im, r, (dw, dh)
+
+
+# In a new file, e.g., my_lift/chromadb_updater.py
+# Or directly in observations.py if you prefer
+
+import torch
+import chromadb
+import uuid
+import numpy as np
+
+
+def process_new_observation(env, new_embedding, new_position, env_id):
+
+    results = env.collection.query(
+        query_embeddings=[new_embedding],
+        n_results=1,
+        include=["metadatas", "distances", "embeddings"],
+        where={"env_id": env_id},
+    )
+
+    # 检查数据库是否为空或最相似的物品是否满足阈值
+    is_new_item = True
+    if results["ids"][0]:  # 如果查询有返回结果
+        # ChromaDB的距离是L2距离，值越小越相似。我们需要转换成相似度或直接比较距离。
+        # 为简单起见，我们假设距离越小越好，设定一个距离阈值
+        # 这个值需要实验确定,THRESHOLD越大，不同物品被合并的可能性越小，同时物品位置信息被更新的可能性也越小，参考：red cube和yellow cube的相似度为0.82
+        cosine_sim_manual_THRESHOLD = 0.87
+        distance = results["distances"][0][0]
+        old_embedding = results["embeddings"][0][0]
+        dot_product = np.dot(new_embedding, old_embedding)
+        # 2. 计算每个向量的 L2 范数 (模长)
+        norm_a = np.linalg.norm(new_embedding)
+        norm_b = np.linalg.norm(old_embedding)
+        # 3. 根据公式计算余弦相似度
+        cosine_sim_manual = dot_product / (norm_a * norm_b)
+        # print(cosine_sim_manual, distance)
+        # 0.18,0.9
+
+        if cosine_sim_manual > cosine_sim_manual_THRESHOLD:
+
+            is_new_item = False
+            existing_id = results["ids"][0][0]
+            # print(f"找到相似物品 (ID: {existing_id}), 距离: {distance:.4f}。正在更新...")
+            position_str = json.dumps(new_position.tolist())
+            # 4b. 覆盖原来的值
+            env.collection.update(
+                ids=[existing_id], embeddings=[new_embedding], metadatas={"env_id": env_id, "position": position_str}
+            )
+
+    if is_new_item:
+        new_id = str(uuid.uuid4())
+        # print(f"未找到相似物品，新建索引 (ID: {new_id})")
+        # 4a. 新建一个索引
+        position_str = json.dumps(new_position.tolist())
+        env.collection.add(
+            ids=[new_id], embeddings=[new_embedding], metadatas={"env_id": env_id, "position": position_str}
+        )
+
+
+@torch.no_grad()
+def find_item_by_text(env, text_embedding, env_id):
+    # 将文本查询编码
+    # 5. 在 collection 中查询
+
+    results = env.collection.query(
+        query_embeddings=[text_embedding], n_results=1, where={"env_id": env_id}, include=["metadatas", "embeddings"]
+    )
+
+    if results["ids"][0]:
+        embedding = results["embeddings"][0][0]
+        norm_a = np.linalg.norm(text_embedding)
+        norm_b = np.linalg.norm(embedding)
+        # 3. 根据公式计算余弦相似度
+        dot_product = np.dot(norm_a, norm_b)
+        cosine_sim_manual = dot_product / (norm_a * norm_b)
+        if cosine_sim_manual > 0.7:
+            found_id = results["ids"][0][0]
+            found_metadata = results["metadatas"][0][0]
+            found_position = found_metadata.get("position")
+            found_position = np.array(json.loads(found_position))
+            # print(f"找到最相似的物品 (ID: {found_id}), 位置是: {found_position}")
+            return found_position
+        else:
+            print("未在数据库中找到匹配的物品。")
+            return np.array([0, 0, 0])
+    else:
+        print("未在数据库中找到匹配的物品。")
+        return np.array([0, 0, 0])
+
+
+@torch.no_grad()
+def update_object_database_with_chromadb(
+    env: LiftEnv,
+    all_embeddings_in_batch: list[torch.Tensor],
+    all_positions_in_batch: list[torch.Tensor],
+):
+    """
+    批量更新 ChromaDB 中的物体数据库。
+
+    Args:
+        env (LiftEnv): The environment instance, used to access the ChromaDB collection.
+        all_embeddings_in_batch (list[torch.Tensor]):
+            一个列表，长度为 N (环境数)。每个元素是 (num_objects, embedding_dim) 的张量，
+            包含了该环境中所有检测到的物体的 embedding。
+        all_positions_in_batch (list[torch.Tensor]):
+            一个列表，长度为 N。每个元素是 (num_objects, 3) 的张量，
+            包含了该环境中所有检测到的物体的位置 (point_pos_b)。
+    """
+    # 假设 collection 在 env 实例中
+    # collection = env.collection
+    batch_size = len(all_embeddings_in_batch)
+    device = env.device
+
+    # --- 2. 准备批量查询数据 ---
+    # 将来自所有环境的 embedding 和元数据展平到一个大列表中
+    # flat_query_embeddings = []
+    # 记录每个 embedding 原始的 env_id 和 item_idx_in_env
+    # 这对于后续将查询结果重新映射回原环境至关重要
+
+    for env_id in range(batch_size):
+        embeddings_in_env = all_embeddings_in_batch[env_id]
+        positions_in_env = all_positions_in_batch[env_id]
+        num_objects_in_env = embeddings_in_env.shape[0]
+
+        for item_idx in range(num_objects_in_env):
+            embedding = embeddings_in_env[item_idx].cpu().numpy()  # 某个物品对应的embedding
+            position = positions_in_env[item_idx].cpu().numpy()
+            process_new_observation(env, new_embedding=embedding, new_position=position, env_id=env_id)
