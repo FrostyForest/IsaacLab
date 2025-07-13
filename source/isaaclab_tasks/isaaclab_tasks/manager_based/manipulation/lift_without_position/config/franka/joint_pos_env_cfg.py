@@ -137,29 +137,29 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         #     ),
         # )
 
-        self.scene.camera_1 = CameraCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/panda_link7/front_cam",
-            update_period=0.1,
-            height=256,  # 480,
-            width=256,  # 640,
-            data_types=["rgb", "depth"],
-            spawn=sim_utils.PinholeCameraCfg(
-                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
-            ),
-            offset=CameraCfg.OffsetCfg(pos=(0, 0.0, 0.12), rot=(1, 0, 0, 0), convention="ros"),  # xyzw
-        )
+        # self.scene.camera_1 = CameraCfg(
+        #     prim_path="{ENV_REGEX_NS}/Robot/panda_link7/front_cam",
+        #     update_period=0.1,
+        #     height=256,  # 480,
+        #     width=256,  # 640,
+        #     data_types=["rgb", "depth"],
+        #     spawn=sim_utils.PinholeCameraCfg(
+        #         focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        #     ),
+        #     offset=CameraCfg.OffsetCfg(pos=(0, 0.0, 0.12), rot=(1, 0, 0, 0), convention="ros"),  # xyzw
+        # )
 
-        self.scene.camera_2 = CameraCfg(
-            prim_path="{ENV_REGEX_NS}/Robot/panda_link0/base_cam",
-            update_period=0.1,
-            height=256,  # 480,
-            width=256,  # 640,
-            data_types=["rgb", "depth"],
-            spawn=sim_utils.PinholeCameraCfg(
-                focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
-            ),
-            offset=CameraCfg.OffsetCfg(pos=(0.0, 0.0, 0.02), rot=(0.5, 0.5, -0.5, -0.5), convention="opengl"),
-        )
+        # self.scene.camera_2 = CameraCfg(
+        #     prim_path="{ENV_REGEX_NS}/Robot/panda_link0/base_cam",
+        #     update_period=0.1,
+        #     height=256,  # 480,
+        #     width=256,  # 640,
+        #     data_types=["rgb", "depth"],
+        #     spawn=sim_utils.PinholeCameraCfg(
+        #         focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        #     ),
+        #     offset=CameraCfg.OffsetCfg(pos=(0.0, 0.0, 0.02), rot=(0.5, 0.5, -0.5, -0.5), convention="opengl"),
+        # )
 
         self.scene.left_finger_contactsensor = ContactSensorCfg(
             prim_path="{ENV_REGEX_NS}/Robot/panda_leftfinger",  # 传感器附着在左手指上

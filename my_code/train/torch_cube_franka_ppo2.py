@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 # import the skrl components to build the RL system
-from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
+from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG, my_PPO
 from skrl.envs.loaders.torch import load_isaaclab_env
 from skrl.envs.wrappers.torch import wrap_env
 from skrl.memories.torch import RandomMemory
@@ -17,6 +17,7 @@ from skrl.resources.schedulers.torch import KLAdaptiveLR
 from skrl.trainers.torch import SequentialTrainer
 from skrl.utils import set_seed
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import torch.distributed as dist
 
 import sys
 import os
@@ -30,8 +31,11 @@ project_root = os.path.dirname(current_dir)
 # 将项目根目录添加到 sys.path 的最前面
 sys.path.insert(0, project_root)
 
+# 引入模型结构
 # from models.model_without_image import Shared
 from models.model_with_image import Shared
+
+# from models.model_without_image_distilling import Shared
 
 # seed for reproducibility
 set_seed()  # e.g. `set_seed(42)` for fixed seed
@@ -40,7 +44,7 @@ set_seed()  # e.g. `set_seed(42)` for fixed seed
 # load and wrap the Isaac Lab environment
 task_name = "Isaac-my_Lift-Cube-Franka-v1"  #
 # task_name = "Isaac-my_Lift-Cube-Franka-IK-Rel-v1"
-env = load_isaaclab_env(task_name=task_name, num_envs=48)  # 设置环境数量
+env = load_isaaclab_env(task_name=task_name, num_envs=52)  # 设置环境数量
 env = wrap_env(env)
 
 device = env.device
@@ -68,29 +72,30 @@ cfg["discount_factor"] = 0.99
 cfg["lambda"] = 0.95
 cfg["learning_rate"] = 1e-3
 cfg["learning_rate_scheduler"] = KLAdaptiveLR
-cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.01, "min_lr": 5e-6}
+cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.01, "min_lr": 2e-6}
 cfg["random_timesteps"] = 0
 cfg["learning_starts"] = 0
 cfg["grad_norm_clip"] = 1.0
 cfg["ratio_clip"] = 0.2
 cfg["value_clip"] = 0.2
 cfg["clip_predicted_values"] = True
-cfg["policy_loss_scale"] = 2.5
+cfg["policy_loss_scale"] = 2
 cfg["entropy_loss_scale"] = 0.001
 cfg["value_loss_scale"] = 1.0
 cfg["kl_threshold"] = 0
 cfg["rewards_shaper"] = None
 cfg["time_limit_bootstrap"] = False
-cfg["state_preprocessor"] = RunningStandardScaler
-cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
+# cfg["state_preprocessor"] = RunningStandardScaler
+# cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
 cfg["value_preprocessor"] = RunningStandardScaler
 cfg["value_preprocessor_kwargs"] = {"size": 1, "device": device}
 # logging to TensorBoard and write checkpoints (in timesteps)
 cfg["experiment"]["write_interval"] = 100
 cfg["experiment"]["checkpoint_interval"] = 2500
 cfg["experiment"]["directory"] = f"runs/torch/{task_name}"
+cfg["optimizer"] = "muon"  # 设置优化器
 
-agent = PPO(
+agent = my_PPO(
     models=models,
     memory=memory,
     cfg=cfg,
@@ -103,8 +108,8 @@ agent = PPO(
 # configure and instantiate the RL trainer
 cfg_trainer = {"timesteps": 67200, "headless": True, "environment_info": "log"}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
-path = "runs/torch/Isaac-my_Lift-Cube-Franka-v1/25-07-08_22-21-03-111795_PPO/checkpoints/best_agent.pt"
-agent.load(path)
+# path = "runs/torch/Isaac-my_Lift-Cube-Franka-v1/25-07-11_17-18-21-810651_my_PPO/checkpoints/best_agent.pt"
+# agent.load(path)
 # start training
 trainer.train()
 
@@ -120,4 +125,4 @@ trainer.train()
 # agent.load(path)
 
 # # start evaluation
-# trainer.eval()
+#

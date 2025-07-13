@@ -59,18 +59,24 @@ def ee_position_in_robot_root_frame(
     return ee_pos_b
 
 
+@torch.no_grad()
 def image_feature_obs(env: LiftEnv) -> torch.Tensor:
     if hasattr(env, "current_target_state_per_env") and env.encoded_task_goal_per_env is not None:
         # text_list=env.current_target_strings_per_env
-        raw_image_data = image(env, sensor_cfg=SceneEntityCfg("camera_1"), data_type="rgb", normalize=False)
-        inputs = env.image_processor(images=raw_image_data, max_num_patches=64, return_tensors="pt").to("cuda")
+        raw_image_data1 = image(env, sensor_cfg=SceneEntityCfg("camera_1"), data_type="rgb", normalize=False)
+        raw_image_data2 = image(env, sensor_cfg=SceneEntityCfg("camera_2"), data_type="rgb", normalize=False)
+        inputs = env.image_processor(
+            images=[raw_image_data1, raw_image_data2], max_num_patches=64, return_tensors="pt"
+        ).to("cuda")
         with torch.no_grad():
             outputs = env.siglip_image_model(**inputs)
         image_feature = outputs.pooler_output
+        image_feature = image_feature.view(2, -1, 768)
+        image_feature = image_feature.permute(1, 0, 2)
         # similirity=F.cosine_similarity(text_embeddings, image_embeddings, dim=-1)
         # print("image feature shape",image_feature.shape)
         # print("similarity",similirity.shape)
-        return image_feature
+        return image_feature  # (n,2,768)
     else:
         # 在 ObservationManager 的 _prepare_terms 阶段，如果属性尚未创建，
         # 返回一个具有正确“形状”的占位符张量，但只包含一个样本（或使用 env.cfg 中的 num_envs）。
@@ -88,6 +94,7 @@ def image_feature_obs(env: LiftEnv) -> torch.Tensor:
         return torch.zeros((env.num_envs, env.feature_dim), dtype=torch.float32)
 
 
+@torch.no_grad()
 def rgb_obs(env: LiftEnv) -> torch.Tensor:
     raw_image_data = image(
         env, sensor_cfg=SceneEntityCfg("camera_1"), data_type="rgb", normalize=True
@@ -120,11 +127,12 @@ def depth_obs(env: LiftEnv) -> torch.Tensor:
     return torch.cat([raw_image_data1, raw_image_data2], dim=-1)
 
 
+@torch.no_grad()
 def text_feature_obs(env: LiftEnv) -> torch.Tensor:
     if hasattr(env, "current_target_state_per_env") and env.encoded_task_goal_per_env is not None:
-        # text_list=env.current_target_strings_per_env
-        # return env.current_target_state_per_env
-        return env.current_target_ids_per_env.unsqueeze(-1)
+        text_list = env.current_target_strings_per_env
+        return env.current_target_state_per_env
+        # return env.current_target_ids_per_env.unsqueeze(-1)
     else:
         # 在 ObservationManager 的 _prepare_terms 阶段，如果属性尚未创建，
         # 返回一个具有正确“形状”的占位符张量，但只包含一个样本（或使用 env.cfg 中的 num_envs）。
@@ -140,7 +148,7 @@ def text_feature_obs(env: LiftEnv) -> torch.Tensor:
         # Manager 会处理 num_envs 的批处理
         # print("[Debug current_env_target_encoded_obs] encoded_task_goal_per_env not found, returning placeholder shape.")
         # return torch.zeros((env.num_envs,env.feature_dim), dtype=torch.float32)
-        return torch.zeros((env.num_envs, 1), dtype=torch.float32)
+        return torch.zeros((env.num_envs, 768), dtype=torch.float32)
 
 
 def get_cubes_position(env: LiftEnv) -> torch.Tensor:
@@ -446,7 +454,7 @@ def rgb_feature(env: LiftEnv):
         features = env.rgb_extractor(input_tensor)
     features = features.reshape(2, -1, 1280)
     features = features.permute(1, 0, 2)
-    features = features.contiguous().reshape(-1, 2 * 1280)
+    # features = features.contiguous().reshape(-1, 2 * 1280)
     # print(features.shape)
     return features
 

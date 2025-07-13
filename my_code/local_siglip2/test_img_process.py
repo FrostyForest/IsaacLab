@@ -12,7 +12,7 @@ image_processor = AutoProcessor.from_pretrained(clip_path, device_map="auto")
 # raw_image_data = Image.open('output_objects/object_2.png')
 # 1. 直接读取为 PyTorch Tensor
 #    返回的 Tensor 形状是 (Channels, Height, Width)
-tensor_image = read_image("output_objects/object_2.png").permute(1, 2, 0)[:, :, :3]
+tensor_image = read_image("output_objects/object_2.png").permute(1, 2, 0)[:, :, :3].unsqueeze(0).expand(3, -1, -1, -1)
 
 # 2. 检查结果
 print("成功读取为 PyTorch Tensor！")
@@ -27,11 +27,13 @@ print(f"数据类型: {tensor_image.dtype}")  # torch.uint8
 # print(f"Tensor 形状: {normalized_tensor.shape}")
 # print(f"数据类型: {normalized_tensor.dtype}") # torch.float32
 # print(f"最小值: {normalized_tensor.min()}, 最大值: {normalized_tensor.max()}")
-img_list = []
-for i in range(0, 5):
-    img_list.append(tensor_image)
+tensor2 = torch.ones_like(tensor_image)
+img_list = [tensor_image, tensor2]
+
 inputs = image_processor(images=img_list, max_num_patches=64, return_tensors="pt").to("cuda")
 
 outputs = siglip_image_model(**inputs).pooler_output
 
-print(outputs.shape)
+print(outputs.shape)  # torch.Size([5, 768])
+if torch.equal(outputs[0], outputs[1]) == True and torch.equal(outputs[0], outputs[3]) == False:
+    print("顺序正确")

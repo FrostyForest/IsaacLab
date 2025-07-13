@@ -45,8 +45,10 @@ def object_is_lifted(
 
     r_div = torch.stack([r1, r2, r3], dim=1)
 
-    r = torch.sum(torch.mul(weight_tensor, r_div), dim=-1).squeeze(-1)
+    r = torch.sum(torch.mul(weight_tensor, r_div), dim=-1).squeeze(-1)  # 最大值为1,最小值为0
     # print("lift reward", r)
+    r = r1
+    env.extras["lift_ratio"] = torch.mean(r1)
 
     return r
 
@@ -96,6 +98,7 @@ def object_ee_distance(
 
     # r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
     r, i = r_div.max(dim=1, keepdim=False)
+    r = r1  # 只需要黄色物体到末端的距离
 
     return r
 
@@ -146,6 +149,7 @@ def object_goal_distance(
     r_div = torch.stack([r1, r2, r3], dim=1)
     r_div = torch.mul(weight_tensor, r_div)
     r, i = r_div.max(dim=1, keepdim=False)
+    r = r1  # 只需要黄色物体
 
     return r  # shape:(n)
 
@@ -214,7 +218,7 @@ def touch_object(
     force_combine = torch.mul(force1, force2)
     condition_for_where = torch.any(force_combine > 1, dim=1, keepdim=True)
     # 如果条件为 True，则值为 0.2，否则为 0.0 (或者你希望的其他默认值)
-    value_if_true = torch.tensor(2)
+    value_if_true = torch.tensor(1)
     value_if_false = torch.tensor(0.0)  # 假设条件不满足时为0
     reward = torch.where(condition_for_where, value_if_true, value_if_false).squeeze(-1)
 
@@ -234,9 +238,9 @@ def touch_object(
     object2_ee_distance = torch.norm(object2_pos_w - ee_w, dim=1)
     object3_ee_distance = torch.norm(object3_pos_w - ee_w, dim=1)
 
-    r1 = 1 - torch.tanh(object1_ee_distance / 0.1)
-    r2 = 1 - torch.tanh(object2_ee_distance / 0.1)
-    r3 = 1 - torch.tanh(object3_ee_distance / 0.1)
+    r1 = 1 - torch.tanh((object1_ee_distance - 0.02) / 0.1)
+    r2 = 1 - torch.tanh((object2_ee_distance - 0.02) / 0.1)
+    r3 = 1 - torch.tanh((object3_ee_distance - 0.02) / 0.1)
 
     # current_target_idx=env.current_target_ids_per_env#torch.Size([num_env])
 
@@ -255,19 +259,19 @@ def touch_object(
     # r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
     r, i = r_div.max(dim=1, keepdim=False)
 
-    reward = torch.mul(r, reward)
+    reward = torch.mul(r1, reward)  # 最大值为1,最小值为0
+
     return reward
 
 
 @torch.no_grad()
-def lift_ratio_obs(
-    env: LiftEnv, minimal_height: float, object_cfg: SceneEntityCfg = SceneEntityCfg("object")
-) -> torch.Tensor:
+def lift_ratio_obs(env: LiftEnv, object_cfg: SceneEntityCfg = SceneEntityCfg("object")) -> torch.Tensor:
     """Reward the agent for lifting the object above the minimal height."""
 
     object1: RigidObject = env.scene["yellow_object"]
     object2: RigidObject = env.scene["green_object"]
     object3: RigidObject = env.scene["red_object"]
+    minimal_height = 0.05
 
     r1 = torch.where(object1.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
     r2 = torch.where(object2.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
@@ -288,5 +292,6 @@ def lift_ratio_obs(
 
     r = torch.sum(torch.mul(weight_tensor, r_div), dim=-1).squeeze(-1)
     # print("lift reward", r)
-
+    env.extras["lift_ratio"] = torch.mean(r)
+    print(env.extras)
     return r

@@ -59,8 +59,8 @@ def main():
             actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
             # apply actions
             observations, reward, terminated, truncated, info = env.step(actions)
-            # print(observations)
-            pprint.pprint(info)
+            # print(reward)
+            # pprint.pprint(info)
 
     # close the simulator
     env.close()

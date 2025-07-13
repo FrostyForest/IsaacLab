@@ -9,7 +9,7 @@ class ResidualBlock(nn.Module):
         self.block1 = nn.Sequential(
             nn.Linear(feature_size, feature_size // 2),
             nn.LayerNorm(feature_size // 2),
-            nn.ELU(),
+            nn.GELU(),
             nn.Linear(feature_size // 2, feature_size),
         )
 
