@@ -50,6 +50,9 @@ from isaaclab.managers import SceneEntityCfg
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
+from models.value_model_with_image import Shared as value_model
+from skrl.envs.wrappers.torch import wrap_env
+from skrl.resources.preprocessors.torch import RunningStandardScaler
 
 
 def pre_process_actions(delta_pose: torch.Tensor, gripper_command: bool) -> torch.Tensor:
@@ -84,6 +87,7 @@ def main():
         )
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg).unwrapped
+    env = wrap_env(env)
     # check environment name (for reach , we don't allow the gripper)
     if "Reach" in args_cli.task:
         omni.log.warn(
@@ -124,6 +128,16 @@ def main():
 
     teleop_interface.add_callback("R", reset_recording_instance)
     print(teleop_interface)
+    device = env.device
+    v_model = value_model(env.observation_space, env.action_space, device, from_scratch=False)
+    value_model_path = (
+        "runs/torch/Isaac-my_Lift-Cube-Franka-v1/25-07-16_00-29-20-988378_my_PPO_rank/checkpoints/best_agent.pt"
+    )
+    check_point_value = torch.load(value_model_path, map_location=device)
+    v_model.load_state_dict(check_point_value["value"])
+    value_preprocessor = RunningStandardScaler
+    value_preprocessor = value_preprocessor(**{"size": 1, "device": device})
+    value_preprocessor.load_state_dict(check_point_value["value_preprocessor"])
 
     # reset environment
     env.reset()
@@ -142,6 +156,11 @@ def main():
             actions = pre_process_actions(delta_pose, gripper_command)
             # apply actions
             observations, reward, terminated, truncated, info = env.step(actions)
+            with torch.no_grad():
+                values_, _, _ = v_model.act({"states": observations}, role="value")
+                values = value_preprocessor(values_, inverse=True)
+            print("origin value", values_.item())
+            print("process value", values.item())
 
             if should_reset_recording_instance:
                 env.reset()

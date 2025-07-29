@@ -52,8 +52,8 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
 
     # bottle: RigidObjectCfg | DeformableObjectCfg = MISSING
 
-    # camera_1: CameraCfg = MISSING
-    # camera_2: CameraCfg = MISSING
+    camera_1: CameraCfg = MISSING
+    camera_2: CameraCfg = MISSING
     left_finger_contactsensor: ContactSensorCfg = MISSING
     right_finger_contactsensor: ContactSensorCfg = MISSING
     # Table
@@ -123,10 +123,10 @@ class ObservationsCfg:
         )  # target position
         actions = ObsTerm(func=mdp.last_action)
 
-        # image_clip_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
-        # text_clip_feature = ObsTerm(func=mdp.text_feature_obs,noise=None)
-        # depth_obs = ObsTerm(func=mdp.depth_obs, noise=None)
-        # rgb_feature = ObsTerm(func=mdp.rgb_feature)
+        image_clip_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
+        text_clip_feature = ObsTerm(func=mdp.text_feature_obs, noise=None)
+        depth_obs = ObsTerm(func=mdp.depth_obs, noise=None)
+        rgb_feature = ObsTerm(func=mdp.rgb_feature)
 
         contact_force_left_finger = ObsTerm(
             func=mdp.get_finger_contact_forces,
@@ -138,8 +138,8 @@ class ObservationsCfg:
             noise=None,
             params={"sensor_cfg": SceneEntityCfg("right_finger_contactsensor")},
         )
-        # object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
-        object_position = ObsTerm(
+        object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
+        object_position_perfect = ObsTerm(
             func=mdp.object_position_in_robot_root_frame, params={"object_cfg": SceneEntityCfg("yellow_object")}
         )
 
@@ -201,7 +201,7 @@ class EventCfg:
 
     # 设定目标
     randomize_task_goal_event = EventTerm(
-        func=mdp.randomize_string_task_goal,  # 使用我们新创建的函数
+        func=mdp.randomize_string_task_goal,
         mode="reset",  # 确保它在环境重置时被调用
         # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
         # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
@@ -213,12 +213,12 @@ class EventCfg:
         # 通常会作用于所有环境 (env_ids=None 效果)
     )
 
-    # reset_database=EventTerm(
-    #     func=mdp.reset_database,  # 使用我们新创建的函数
-    #     mode="reset",  # 确保它在环境重置时被调用
-    #     # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
-    #     # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
-    # )
+    reset_database = EventTerm(
+        func=mdp.reset_database,
+        mode="reset",  # 确保它在环境重置时被调用
+        # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
+        # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
+    )
 
     # reset_bottle_position = EventTerm(
     #     func=mdp.reset_root_state_uniform,
@@ -236,10 +236,10 @@ class RewardsCfg:  # 记录的结果是乘了weight之后
     """Reward terms for the MDP."""
 
     # reaching_object = RewTerm(func=mdp.object_ee_distance, params={"std": 0.1}, weight=0.075)
-    reaching_object = RewTerm(func=mdp.object_ee_distance, params={"std": 0.12}, weight=1)
+    reaching_object = RewTerm(func=mdp.object_ee_distance, params={"std": 0.1}, weight=1)
 
     # lifting_object = RewTerm(func=mdp.object_is_lifted, params={"minimal_height": 0.04}, weight=20)
-    lifting_object = RewTerm(func=mdp.object_is_lifted, params={"minimal_height": 0.04}, weight=17.5)
+    lifting_object = RewTerm(func=mdp.object_is_lifted, params={"minimal_height": 0.04}, weight=15)
 
     # object_goal_tracking = RewTerm(
     #     func=mdp.object_goal_distance,
@@ -249,7 +249,7 @@ class RewardsCfg:  # 记录的结果是乘了weight之后
     object_goal_tracking = RewTerm(
         func=mdp.object_goal_distance,
         params={"std": 0.3, "minimal_height": 0.04, "command_name": "object_pose"},
-        weight=7,
+        weight=16,
     )
 
     # object_goal_tracking_fine_grained = RewTerm(
@@ -275,10 +275,10 @@ class RewardsCfg:  # 记录的结果是乘了weight之后
     #     func=mdp.touch_object,
     #     weight=0.5,
     # )
-    touching_object = RewTerm(
-        func=mdp.touch_object,
-        weight=1,
-    )
+    # touching_object = RewTerm(
+    #     func=mdp.touch_object,
+    #     weight=1,
+    # )
 
 
 @configclass

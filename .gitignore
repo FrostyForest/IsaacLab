@@ -72,3 +72,4 @@ _build
 # 忽略所有名为 "runs" 的文件夹
 runs/
 
+.env

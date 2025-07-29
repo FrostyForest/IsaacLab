@@ -151,6 +151,9 @@ def object_goal_distance(
     r, i = r_div.max(dim=1, keepdim=False)
     r = r1  # 只需要黄色物体
 
+    distance1 = torch.norm(des_pos_w - object1.data.root_pos_w[:, :3], dim=1).mean()
+    env.extras["ee_object_distance"] = distance1
+
     return r  # shape:(n)
 
 

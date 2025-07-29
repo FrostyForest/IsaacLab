@@ -47,11 +47,11 @@ class LiftEnv(ManagerBasedRLEnv):
         self.siglip_text_model = Siglip2TextModel.from_pretrained(self.clip_path, device_map="auto").eval()
         self.text_processor = AutoTokenizer.from_pretrained(self.clip_path, device_map="auto")
 
-        # self.sam_model = FastSAM("/home/linhai/code/IsaacLab/my_code/fast_sam/FastSAM-x.pt")  # 确保路径正确
-
-        # settings = Settings(anonymized_telemetry=False)
-        # self.client = chromadb.Client(settings=settings)
-        # self.collection = self.client.get_or_create_collection(name="robot_seen_objects")
+        # 根据深度信息计算位置需要启用一下模型
+        self.sam_model = FastSAM("/home/linhai/code/IsaacLab/my_code/fast_sam/FastSAM-x.pt")  # 确保路径正确
+        settings = Settings(anonymized_telemetry=False)
+        self.client = chromadb.Client(settings=settings)
+        self.collection = self.client.get_or_create_collection(name="robot_seen_objects")
 
         self.rgb_extractor = timm.create_model("efficientnet_b0", pretrained=False, num_classes=0)
         self.rgb_processor = self._rgb_processor()
@@ -66,7 +66,7 @@ class LiftEnv(ManagerBasedRLEnv):
         state_dict = torch.load(rgb_weight_path, map_location="cuda")
         self.rgb_extractor.load_state_dict(state_dict, strict=False)
 
-        # 你可以在这里执行一些一次性的设置，如果它们依赖于完全初始化的环境
+        # 可以在这里执行一些一次性的设置，如果它们依赖于完全初始化的环境
         # 但不适合放在事件中的逻辑（例如，只在环境对象创建时做一次的事情）
         print(f"MyCustomLiftEnv initialized with {self.num_envs} environments on device {self.device}.")
         print(f"Available string targets: {PREDEFINED_TARGETS}")
@@ -123,6 +123,3 @@ class LiftEnv(ManagerBasedRLEnv):
         return torch_transforms
 
     # 其他特定于你的环境的方法...
-
-
-# --- END OF FILE my_custom_lift_env.py ---

@@ -15,6 +15,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         min_log_std=-20,
         max_log_std=2,
         reduction="sum",
+        init_log_std=0,
     ):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
@@ -45,7 +46,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             # nn.ELU(),
             # nn.Linear(self.num_actions, self.num_actions),
         )
-        self.log_std_parameter = nn.Parameter(torch.ones(self.num_actions))
+        self.log_std_parameter = nn.Parameter(torch.ones(self.num_actions) * init_log_std)
 
         self.value_layer = nn.Sequential(
             nn.Linear(256, 1),
@@ -90,6 +91,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             print(f"为 '{key}' 注册了维度为 {dim} 的归一化缓冲区。")
 
         self.ema_momentum = 0.975
+        self._shared_output = None
 
     def _initialization_hook(self, module, inputs):
         """这个钩子函数会在每次 forward 调用前执行"""
@@ -246,48 +248,44 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             return self.mean_layer(r3), self.log_std_parameter, {}
         elif role == "value":
             # shared_output = self.net(inputs["states"]) if self._shared_output is None else self._shared_output
-            if self._shared_output is None:
-                state_data1 = (
-                    torch.cat(
-                        [
-                            (space["joint_pos"] - self.joint_pos_mean) / self.joint_pos_std,
-                            (space["joint_vel"] - self.joint_vel_mean) / self.joint_vel_std,
-                            # space["ee_position"],
-                            # space["target_object_position"],
-                            (space["actions"] - self.actions_mean) / self.actions_std,
-                            # space["contact_force_left_finger"],
-                            # space["contact_force_left_finger"],
-                        ],
-                        dim=-1,
-                    )
-                    .to(torch.float32)
-                    .clamp(max=10, min=-10)
+            state_data1 = (
+                torch.cat(
+                    [
+                        (space["joint_pos"] - self.joint_pos_mean) / self.joint_pos_std,
+                        (space["joint_vel"] - self.joint_vel_mean) / self.joint_vel_std,
+                        # space["ee_position"],
+                        # space["target_object_position"],
+                        (space["actions"] - self.actions_mean) / self.actions_std,
+                        # space["contact_force_left_finger"],
+                        # space["contact_force_left_finger"],
+                    ],
+                    dim=-1,
                 )
-                state_data2 = (
-                    torch.cat(
-                        [
-                            # space["joint_pos"],
-                            # space["joint_vel"],
-                            (space["object_position"] - self.object_position_mean) / self.object_position_std,  # 3
-                            (space["ee_position"] - self.ee_position_mean) / self.ee_position_std,  # 3
-                            (space["target_object_position"] - self.target_object_position_mean)
-                            / self.target_object_position_std,  # 7
-                            # space["actions"],
-                            space["contact_force_left_finger"],  # 1
-                            space["contact_force_left_finger"],  # 1
-                        ],
-                        dim=-1,
-                    )
-                    .to(torch.float32)
-                    .clamp(max=10, min=-10)
+                .to(torch.float32)
+                .clamp(max=10, min=-10)
+            )
+            state_data2 = (
+                torch.cat(
+                    [
+                        # space["joint_pos"],
+                        # space["joint_vel"],
+                        (space["object_position"] - self.object_position_mean) / self.object_position_std,  # 3
+                        (space["ee_position"] - self.ee_position_mean) / self.ee_position_std,  # 3
+                        (space["target_object_position"] - self.target_object_position_mean)
+                        / self.target_object_position_std,  # 7
+                        # space["actions"],
+                        space["contact_force_left_finger"],  # 1
+                        space["contact_force_right_finger"],  # 1
+                    ],
+                    dim=-1,
                 )
+                .to(torch.float32)
+                .clamp(max=10, min=-10)
+            )
 
-                feature1 = self.state_net1(state_data1)
-                feature3 = self.state_net2(state_data2)
-                r1 = self.block1(torch.cat([feature1, feature3], dim=-1))
-                r2 = self.block2(r1)
-                shared_output = r2
-            else:
-                shared_output = self._shared_output
-            self._shared_output = None
+            feature1 = self.state_net1(state_data1)
+            feature3 = self.state_net2(state_data2)
+            r1 = self.block1(torch.cat([feature1, feature3], dim=-1))
+            r2 = self.block2(r1)
+            shared_output = r2
             return self.value_layer(shared_output), {}

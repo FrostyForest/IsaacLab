@@ -44,17 +44,9 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         # self.net = nn.Sequential(nn.Linear(256, 256), nn.ELU(), nn.Linear(256, 128),nn.LayerNorm(128),nn.ELU(),nn.Linear(128, 64), nn.ELU())
         self.block1 = utils.ResidualBlock(feature_size=self.mid_dim)
         self.block2 = utils.ResidualBlock(feature_size=self.mid_dim)
-        self.action_block = utils.ResidualBlock(feature_size=self.mid_dim)
         self.rgb_feature_embedding = nn.Linear(in_features=1280, out_features=40)
         self.depth_feature_embedding = nn.Linear(in_features=1024, out_features=60)
         self.clip_embedding = nn.Linear(in_features=768, out_features=60)
-
-        self.mean_layer = nn.Sequential(
-            nn.Linear(self.mid_dim, self.num_actions),
-            # nn.ELU(),
-            # nn.Linear(self.num_actions, self.num_actions),
-        )
-        self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
         self.value_layer = nn.Sequential(
             nn.Linear(self.mid_dim, 1),
@@ -150,7 +142,8 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
     def compute(self, inputs, role):
 
         space = self.tensor_to_space(inputs["states"], self.observation_space)
-        if role == "policy":
+        if role == "value":
+            # shared_output = self.net(inputs["states"]) if self._shared_output is None else self._shared_output
             # rgb_history = space["rgb_obs_history"].reshape(
             #     space["rgb_obs"].shape[0], space["rgb_obs"].shape[1], space["rgb_obs"].shape[2], -1
             # )
@@ -216,83 +209,6 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
                 torch.cat([feature1, feature2, feature_rgb, feature_depth, text_clip_f, image_clip_f], dim=-1)
             )
             r2 = self.block2(r1)
-            self._shared_output = r2
-            r3 = self.action_block(self._shared_output)
-            with torch.no_grad():
-                # self.log_std_parameter.data 是获取参数底层的张量数据
-                # .clamp_(max=0.0) 是一个原地操作，将所有大于 0.0 的元素设置为 0.0
-                self.log_std_parameter.data.clamp_(max=0.0)
-            return self.mean_layer(r3), self.log_std_parameter, {}
-        elif role == "value":
-            # shared_output = self.net(inputs["states"]) if self._shared_output is None else self._shared_output
-            if self._shared_output is None:
-                # rgb_history = space["rgb_obs_history"].reshape(
-                #     space["rgb_obs"].shape[0], space["rgb_obs"].shape[1], space["rgb_obs"].shape[2], -1
-                # )
-                # depth_history = space["depth_obs_history"].reshape(
-                #     space["rgb_obs"].shape[0], space["rgb_obs"].shape[1], space["rgb_obs"].shape[2], -1
-                # )
-                # rgb_data = torch.cat([space["rgb_obs"], rgb_history, space["depth_obs"], depth_history], dim=-1).permute(
-                #     0, 3, 1, 2
-                # )
+            shared_output = r2
 
-                state_data1 = (
-                    torch.cat(
-                        [
-                            (space["joint_pos"] - self.joint_pos_mean) / self.joint_pos_std,
-                            (space["joint_vel"] - self.joint_vel_mean) / self.joint_vel_std,
-                            # space["ee_position"],
-                            # space["target_object_position"],
-                            (space["actions"] - self.actions_mean) / self.actions_std,
-                            # space["contact_force_left_finger"],
-                            # space["contact_force_left_finger"],
-                        ],
-                        dim=-1,
-                    )
-                    .to(torch.float32)
-                    .clamp(max=10, min=-10)
-                )
-                state_data2 = (
-                    torch.cat(
-                        [
-                            # space["joint_pos"],
-                            # space["joint_vel"],
-                            (space["object_position"] - self.object_position_mean) / self.object_position_std,  # 3
-                            (space["ee_position"] - self.ee_position_mean) / self.ee_position_std,  # 3
-                            (space["target_object_position"] - self.target_object_position_mean)
-                            / self.target_object_position_std,  # 7
-                            # space["actions"],
-                            (space["contact_force_left_finger"] - self.contact_force_left_finger_mean)
-                            / self.contact_force_left_finger_std,  # 1
-                            (space["contact_force_right_finger"] - self.contact_force_right_finger_mean)
-                            / self.contact_force_right_finger_std,  # 1
-                        ],
-                        dim=-1,
-                    )
-                    .to(torch.float32)
-                    .clamp(max=10, min=-10)
-                )
-
-                feature1 = self.state_net1(state_data1)
-                feature2 = self.state_net2(state_data2)
-                feature_depth = self.depth_feature_embedding(
-                    self.depth_net(
-                        ((torch.log10(space["depth_obs"] + 1e-5) - self.depth_obs_mean) / self.depth_obs_std)
-                        .clamp(min=-10, max=10)
-                        .permute(0, 3, 1, 2)
-                    )
-                )
-                feature_rgb = self.rgb_feature_embedding(space["rgb_feature"]).reshape(-1, 80)
-
-                text_clip_f = self.clip_embedding(space["text_clip_feature"])  # (n,60)
-                image_clip_f = self.clip_embedding(space["image_clip_feature"]).reshape(-1, 120)  # (n,120)
-
-                r1 = self.block1(
-                    torch.cat([feature1, feature2, feature_rgb, feature_depth, text_clip_f, image_clip_f], dim=-1)
-                )
-                r2 = self.block2(r1)
-                shared_output = r2
-            else:
-                shared_output = self._shared_output
-            self._shared_output = None
             return self.value_layer(shared_output), {}
