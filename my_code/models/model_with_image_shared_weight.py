@@ -23,6 +23,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         max_log_std=2,
         reduction="sum",
         perfect_position=True,
+        no_object_position=False,
     ):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
@@ -30,11 +31,11 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
 
         # --- 网络结构定义 (保持不变) ---
         self.state_net1 = nn.Sequential(
-            nn.Linear(26, 80),
+            nn.Linear(26, 50),
             nn.ELU(),
         )
         self.state_net2 = nn.Sequential(
-            nn.Linear(15, 80),
+            nn.Linear(19, 110),
             nn.ELU(),
         )
         self.depth_net = timm.create_model(
@@ -42,8 +43,14 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         )
         self.mid_dim = 80 + 80 + 60 * 3 + 60 + 40 * 2
 
-        self.block1 = utils.ResidualBlock(feature_size=self.mid_dim)
-        self.block2 = utils.ResidualBlock(feature_size=self.mid_dim)
+        # self.block1 = utils.ResidualBlock(feature_size=self.mid_dim)
+        # self.block2 = utils.ResidualBlock(feature_size=self.mid_dim)
+        # self.block3 = utils.ResidualBlock(feature_size=self.mid_dim)
+        self.backbone = nn.Sequential(
+            utils.ResidualBlock(feature_size=self.mid_dim),
+            utils.ResidualBlock(feature_size=self.mid_dim),
+            utils.ResidualBlock(feature_size=self.mid_dim),
+        )
         self.action_block = utils.ResidualBlock(feature_size=self.mid_dim)
         self.rgb_feature_embedding = nn.Linear(in_features=1280, out_features=40)
         self.depth_feature_embedding = nn.Linear(in_features=1024, out_features=60)
@@ -52,15 +59,19 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         self.mean_layer = nn.Sequential(nn.Linear(self.mid_dim, self.num_actions))
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
         self.value_layer = nn.Sequential(nn.Linear(self.mid_dim, 1))
+        self.position_layer = nn.Sequential(nn.Linear(self.mid_dim, 3))
+        self.position_dif_layer = nn.Sequential(nn.Linear(self.mid_dim, 3))  # 预测末端位置与目标物体位置的差值
         self.perfect_position = perfect_position
+        self.no_object_position = no_object_position
 
         # --- 重构后的归一化部分 ---
         # 定义需要被归一化的观测空间部分
         normalization_spaces = {
             "joint_pos": observation_space["joint_pos"],
             "joint_vel": observation_space["joint_vel"],
-            "object_position": observation_space["object_position"],
+            "object_position": observation_space["object_position_perfect"],
             "ee_position": observation_space["ee_position"],
+            "ee_camera_orientation": observation_space["ee_camera_orientation"],
             "target_object_position": observation_space["target_object_position"],
             "actions": observation_space["actions"],
             "contact_force_left_finger": observation_space["contact_force_left_finger"],
@@ -100,7 +111,10 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             norm_object_pos = self.scalers["object_position"](space["object_position_perfect"], train=self.training)
         else:
             norm_object_pos = self.scalers["object_position"](space["object_position"], train=self.training)
+        if self.no_object_position:
+            norm_object_pos = torch.zeros_like(space["object_position_perfect"])
         norm_ee_pos = self.scalers["ee_position"](space["ee_position"], train=self.training)
+        norm_ee_camera_ori = self.scalers["ee_camera_orientation"](space["ee_camera_orientation"], train=self.training)
         norm_target_pos = self.scalers["target_object_position"](space["target_object_position"], train=self.training)
         norm_left_finger_force = self.scalers["contact_force_left_finger"](
             space["contact_force_left_finger"], train=self.training
@@ -111,7 +125,15 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
 
         state_data1 = torch.cat([norm_joint_pos, norm_joint_vel, norm_actions], dim=-1).to(torch.float32)
         state_data2 = torch.cat(
-            [norm_object_pos, norm_ee_pos, norm_target_pos, norm_left_finger_force, norm_right_finger_force], dim=-1
+            [
+                norm_object_pos,
+                norm_ee_pos,
+                norm_ee_camera_ori,
+                norm_target_pos,
+                norm_left_finger_force,
+                norm_right_finger_force,
+            ],
+            dim=-1,
         ).to(torch.float32)
 
         feature1 = self.state_net1(state_data1)
@@ -121,8 +143,9 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         # 对深度图先应用对数变换，然后再进行归一化
         depth_log = torch.log10(space["depth_obs"] + 1e-5)
         norm_depth = self.depth_scaler(depth_log, train=self.training).float()
-
-        feature_depth = self.depth_feature_embedding(self.depth_net(norm_depth.permute(0, 3, 1, 2)))
+        feature_depth = self.depth_feature_embedding(
+            self.depth_net(norm_depth.permute(0, 3, 1, 2))
+        )  # 输入数据[n, 2, 256, 256]
         feature_rgb = self.rgb_feature_embedding(space["rgb_feature"].float()).reshape(-1, 80)
         text_clip_f = self.clip_embedding(space["text_clip_feature"])
         image_clip_f = self.clip_embedding(space["image_clip_feature"]).reshape(-1, 120)
@@ -132,8 +155,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             [feature1, feature2, feature_rgb, feature_depth, text_clip_f, image_clip_f], dim=-1
         )
 
-        r1 = self.block1(combined_features)
-        r2 = self.block2(r1)
+        r2 = self.backbone(combined_features)
 
         return r2
 
@@ -158,6 +180,11 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
 
         elif role == "value":
             return self.value_layer(shared_output), {}
+
+        elif role == "position":
+            predict_object_position = self.position_layer(shared_output)
+            predict_position_dif = self.position_dif_layer(shared_output)
+            return predict_object_position, predict_position_dif, space["object_position_perfect"], space["ee_position"]
 
 
 # --- END OF REFACTORED FILE ---

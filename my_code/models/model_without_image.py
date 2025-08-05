@@ -35,21 +35,23 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             # nn.Linear(64, 16),
             # nn.ELU(),
         )
+        self.clip_embedding = nn.Linear(in_features=768, out_features=32)
         # self.rgb_net = utils.CustomFeatureExtractor(in_channels=16, output_dim=16)
         # self.net = nn.Sequential(nn.Linear(256, 256), nn.ELU(), nn.Linear(256, 128),nn.LayerNorm(128),nn.ELU(),nn.Linear(128, 64), nn.ELU())
-        self.block1 = utils.ResidualBlock(feature_size=256)
-        self.block2 = utils.ResidualBlock(feature_size=256)
-        self.action_block = utils.ResidualBlock(feature_size=256)
+        self.mid_dim = 128 * 2 + 32
+        self.block1 = utils.ResidualBlock(feature_size=self.mid_dim)
+        self.block2 = utils.ResidualBlock(feature_size=self.mid_dim)
+        self.action_block = utils.ResidualBlock(feature_size=self.mid_dim)
 
         self.mean_layer = nn.Sequential(
-            nn.Linear(256, self.num_actions),
+            nn.Linear(self.mid_dim, self.num_actions),
             # nn.ELU(),
             # nn.Linear(self.num_actions, self.num_actions),
         )
         self.log_std_parameter = nn.Parameter(torch.ones(self.num_actions) * init_log_std)
 
         self.value_layer = nn.Sequential(
-            nn.Linear(256, 1),
+            nn.Linear(self.mid_dim, 1),
         )
 
         self.register_buffer("initialized", torch.tensor(0, dtype=torch.bool))
@@ -71,7 +73,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
         self.normalization_spaces = {
             "joint_pos": observation_space["joint_pos"],
             "joint_vel": observation_space["joint_vel"],
-            "object_position": observation_space["object_position"],
+            "object_position": observation_space["object_position_perfect"],
             "ee_position": observation_space["ee_position"],
             "target_object_position": observation_space["target_object_position"],
             "actions": observation_space["actions"],  # 你的 space 中包含了过去的 actions
@@ -224,7 +226,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
                     [
                         # space["joint_pos"],
                         # space["joint_vel"],
-                        (space["object_position"] - self.object_position_mean) / self.object_position_std,  # 3
+                        (space["object_position_perfect"] - self.object_position_mean) / self.object_position_std,  # 3
                         (space["ee_position"] - self.ee_position_mean) / self.ee_position_std,  # 3
                         (space["target_object_position"] - self.target_object_position_mean)
                         / self.target_object_position_std,  # 7
@@ -241,7 +243,9 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
             feature1 = self.state_net1(state_data1)
             feature3 = self.state_net2(state_data2)
 
-            r1 = self.block1(torch.cat([feature1, feature3], dim=-1))
+            clip_embed = self.clip_embedding(space["text_clip_feature"])
+
+            r1 = self.block1(torch.cat([feature1, feature3, clip_embed], dim=-1))
             r2 = self.block2(r1)
             self._shared_output = r2
             r3 = self.action_block(self._shared_output)
@@ -269,7 +273,7 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
                     [
                         # space["joint_pos"],
                         # space["joint_vel"],
-                        (space["object_position"] - self.object_position_mean) / self.object_position_std,  # 3
+                        (space["object_position_perfect"] - self.object_position_mean) / self.object_position_std,  # 3
                         (space["ee_position"] - self.ee_position_mean) / self.ee_position_std,  # 3
                         (space["target_object_position"] - self.target_object_position_mean)
                         / self.target_object_position_std,  # 7
@@ -285,7 +289,8 @@ class Shared(GaussianMixin, DeterministicMixin, Model):
 
             feature1 = self.state_net1(state_data1)
             feature3 = self.state_net2(state_data2)
-            r1 = self.block1(torch.cat([feature1, feature3], dim=-1))
+            clip_embed = self.clip_embedding(space["text_clip_feature"])
+            r1 = self.block1(torch.cat([feature1, feature3, clip_embed], dim=-1))
             r2 = self.block2(r1)
             shared_output = r2
             return self.value_layer(shared_output), {}

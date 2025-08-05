@@ -49,11 +49,11 @@ train_with_img = "--enable_cameras" in sys.argv
 # load and wrap the Isaac Lab environment
 task_name = "Isaac-my_Lift-Cube-Franka-v1"  #
 # task_name = "Isaac-my_Lift-Cube-Franka-IK-Rel-v1"
-env = load_isaaclab_env(task_name=task_name, num_envs=2)  # 设置环境数量
+env = load_isaaclab_env(task_name=task_name, num_envs=1)  # 设置环境数量
 env = wrap_env(env)
 device = env.device
 
-memory_size = 32
+memory_size = 30
 # instantiate a memory as rollout buffer (any memory can be used for this)
 memory = RandomMemory(memory_size=memory_size, num_envs=env.num_envs, device=device)
 
@@ -71,15 +71,17 @@ if train_with_img == True:
     # models["value"] = value_model(env.observation_space, env.action_space, device,from_scratch=False)  # same instance: shared model
     from models.model_with_image_shared_weight import Shared
 
-    models["policy"] = Shared(env.observation_space, env.action_space, device, perfect_position=False)
+    models["policy"] = Shared(
+        env.observation_space, env.action_space, device, perfect_position=True, no_object_position=True
+    )
     models["value"] = models["policy"]
 else:
     from models.model_without_image import Shared
 
     models["policy"] = Shared(env.observation_space, env.action_space, device, cfg["init_log_std"])
     models["value"] = Shared(env.observation_space, env.action_space, device, cfg["init_log_std"])
-    # cfg["state_preprocessor"] = RunningStandardScaler
-    # cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
+    cfg["state_preprocessor"] = RunningStandardScaler
+    cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
 
 # configure and instantiate the agent (visit its documentation to see all the options)
 # https://skrl.readthedocs.io/en/latest/api/agents/ppo.html#configuration-and-hyperparameters
@@ -113,12 +115,12 @@ cfg["value_preprocessor_kwargs"] = {"size": 1, "device": device}
 # logging to TensorBoard and write checkpoints (in timesteps)
 cfg["experiment"]["write_interval"] = 100
 cfg["experiment"]["checkpoint_interval"] = 200
-cfg["experiment"]["directory"] = f"runs/torch/{task_name}"
+cfg["experiment"]["directory"] = f"runs/torch/{task_name}_cameras_{train_with_img}"
 cfg["optimizer"] = "muon"  # 设置优化器
 cfg["activate_ranknet_loss"] = True
 cfg["value_clip_ratio"] = 0.02
 cfg["target_ranking_saturation_ratio"] = 0.2
-cfg["timesteps"] = 36000
+cfg["timesteps"] = 32000
 cfg["activate_cos_weight_grad_norm"] = False
 cfg["cos_weight_cycle"] = 600
 cfg["experiment"]["wandb"] = True
@@ -178,9 +180,9 @@ agent = my_PPO_rank(
 cfg_trainer = {"timesteps": cfg["timesteps"], "headless": True, "environment_info": "log"}
 trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
 if train_with_img:
-    path = "runs/torch/Isaac-my_Lift-Cube-Franka-v1/25-07-29_01-54-16-214033_my_PPO_rank/checkpoints/best_agent.pt"
+    path = "runs/torch/Isaac-my_Lift-Cube-Franka-v1_cameras_True/25-08-02_02-01-49-623231_my_PPO_rank/checkpoints/best_agent.pt"
 else:
-    path = ""
+    path = "runs/torch/Isaac-my_Lift-Cube-Franka-v1_cameras_False/25-07-30_02-09-48-130521_my_PPO_rank/checkpoints/best_agent.pt"
 # # #仅加载模型权重
 # checkpoint = torch.load(path, map_location=device)
 # agent.models["policy"].load_state_dict(checkpoint["policy"])

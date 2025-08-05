@@ -12,6 +12,7 @@ from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor, ContactSensorCfg, FrameTransformer
 from isaaclab.utils.math import combine_frame_transforms
+from .string_target import ID_TO_TARGET, NUM_TARGETS, PREDEFINED_TARGETS, TARGET_TO_ID
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -19,88 +20,69 @@ if TYPE_CHECKING:
     from isaaclab_tasks.manager_based.manipulation.my_lift.lift_env import LiftEnv
 
 
-def object_is_lifted(
-    env: LiftEnv, minimal_height: float, object_cfg: SceneEntityCfg = SceneEntityCfg("object")
-) -> torch.Tensor:
-    """Reward the agent for lifting the object above the minimal height."""
+def object_is_lifted(env: LiftEnv, minimal_height: float) -> torch.Tensor:
+    """Reward the agent for lifting the TARGET object above the minimal height."""
+    # 1. 获取所有物体的引用
+    objects = [env.scene[name] for name in PREDEFINED_TARGETS]
 
-    object1: RigidObject = env.scene["yellow_object"]
-    object2: RigidObject = env.scene["green_object"]
-    object3: RigidObject = env.scene["red_object"]
+    # 2. 计算每个物体的“是否被举起”的布尔张量
+    #    这里我们用一个列表来存储每个物体的奖励
+    per_object_lifted_rewards = [torch.where(obj.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0) for obj in objects]
 
-    r1 = torch.where(object1.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
-    r2 = torch.where(object2.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
-    r3 = torch.where(object3.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)
+    # 3. 将所有物体的奖励堆叠成一个张量
+    #    形状: (num_envs, num_objects) -> (num_envs, 3)
+    all_rewards = torch.stack(per_object_lifted_rewards, dim=1)
 
-    current_target_idx = env.current_target_ids_per_env  # torch.Size([num_env])
+    # 4. 获取当前每个环境的目标ID
+    #    形状: (num_envs,)
+    #    确保它是 long 类型以便用作索引
+    target_ids = env.current_target_ids_per_env.long()
 
-    mapping_vectors = torch.tensor(
-        [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=env.device  # 对应输入 0  # 对应输入 1  # 对应输入 2
-    )
-    if current_target_idx.dtype != torch.long:
-        current_target_idx = current_target_idx.long()
-    else:
-        current_target_idx = current_target_idx
-    weight_tensor = mapping_vectors[current_target_idx]
+    # 5. 【核心】使用 gather 根据目标ID选择正确的奖励
+    #    - target_ids.unsqueeze(-1) 将形状变为 (num_envs, 1)
+    #    - torch.gather 会沿着 dim=1，根据 target_ids 中的索引，从 all_rewards 中取出对应的奖励
+    #    - 例如，如果 env 0 的 target_id 是 1 (green)，它就会从 all_rewards[0] 中取出索引为 1 的那个奖励值
+    target_specific_reward = torch.gather(all_rewards, 1, target_ids.unsqueeze(-1)).squeeze(-1)
 
-    r_div = torch.stack([r1, r2, r3], dim=1)
+    # 6. 更新 extras 用于监控（可选，但推荐）
+    #    这里我们监控所有物体的平均举起比例，以及目标物体的举起比例
+    # env.extras["lift_ratio/yellow"] = torch.mean(per_object_lifted_rewards[0])
+    # env.extras["lift_ratio/green"] = torch.mean(per_object_lifted_rewards[1])
+    # env.extras["lift_ratio/red"] = torch.mean(per_object_lifted_rewards[2])
+    env.extras["lift_ratio"] = torch.mean(target_specific_reward).item()  # 这是最重要的监控指标
 
-    r = torch.sum(torch.mul(weight_tensor, r_div), dim=-1).squeeze(-1)  # 最大值为1,最小值为0
-    # print("lift reward", r)
-    r = r1
-    env.extras["lift_ratio"] = torch.mean(r1)
-
-    return r
+    return target_specific_reward
 
 
 def object_ee_distance(
-    env: LiftEnv,
-    std: float,
-    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
-    ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
+    env: LiftEnv, std: float, ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame")
 ) -> torch.Tensor:
-    """Reward the agent for reaching the object using tanh-kernel."""
-    # 物体与末端执行器之间的距离奖励
-    # extract the used quantities (to enable type-hinting)
+    """Reward the agent for reaching the TARGET object using a tanh-kernel."""
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
-    # End-effector position: (num_envs, 3)
-    ee_w = ee_frame.data.target_pos_w[..., 0, :]
+    ee_pos_w = ee_frame.data.target_pos_w[..., 0, :]
 
-    object1: RigidObject = env.scene["yellow_object"]
-    object2: RigidObject = env.scene["green_object"]
-    object3: RigidObject = env.scene["red_object"]
-    # Target object position: (num_envs, 3)
-    object1_pos_w = object1.data.root_pos_w
-    object2_pos_w = object2.data.root_pos_w
-    object3_pos_w = object3.data.root_pos_w
-    # Distance of the end-effector to the object: (num_envs,)
-    object1_ee_distance = torch.norm(object1_pos_w - ee_w, dim=1)
-    object2_ee_distance = torch.norm(object2_pos_w - ee_w, dim=1)
-    object3_ee_distance = torch.norm(object3_pos_w - ee_w, dim=1)
+    # 1. 获取所有物体的引用
+    objects = [env.scene[name] for name in PREDEFINED_TARGETS]
+    # 2. 计算末端到每个物体的距离奖励
+    per_object_dist_rewards = [
+        1 - torch.tanh(torch.norm(obj.data.root_pos_w - ee_pos_w, dim=1) / std) for obj in objects
+    ]
 
-    r1 = 1 - torch.tanh(object1_ee_distance / std)
-    r2 = 1 - torch.tanh(object2_ee_distance / std)
-    r3 = 1 - torch.tanh(object3_ee_distance / std)
+    # 3. 堆叠
+    all_rewards = torch.stack(per_object_dist_rewards, dim=1)
 
-    current_target_idx = env.current_target_ids_per_env  # torch.Size([num_env])
+    # 4. 获取目标ID
+    target_ids = env.current_target_ids_per_env.long()
 
-    # mapping_vectors = torch.tensor([
-    # [1.0, 0.0, 0.0],  # 对应输入 0
-    # [0.0, 1.0, 0.0],  # 对应输入 1
-    # [0.0, 0.0, 1.0]   # 对应输入 2
-    # ],device=env.device)
-    # if current_target_idx.dtype != torch.long:
-    #    current_target_idx = current_target_idx.long()
-    # else:
-    #     current_target_idx = current_target_idx
-    # weight_tensor=mapping_vectors[current_target_idx]
-    r_div = torch.stack([r1, r2, r3], dim=1)
+    # 5. 【核心】使用 gather 选择目标物体的奖励
+    target_specific_reward = torch.gather(all_rewards, 1, target_ids.unsqueeze(-1)).squeeze(-1)
 
-    # r=torch.sum(torch.mul(weight_tensor,r_div),dim=-1).squeeze(-1)
-    r, i = r_div.max(dim=1, keepdim=False)
-    r = r1  # 只需要黄色物体到末端的距离
+    # 6. 监控（可选）
+    env.extras["ee_object_distance"] = torch.mean(
+        torch.norm(objects[target_ids[0].item()].data.root_pos_w - ee_pos_w, dim=1)
+    ).item()
 
-    return r
+    return target_specific_reward
 
 
 def object_goal_distance(
@@ -109,52 +91,40 @@ def object_goal_distance(
     minimal_height: float,
     command_name: str,
     robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
 ) -> torch.Tensor:
-    """Reward the agent for tracking the goal pose using tanh-kernel."""
-    # 物体与目标位置之间的距离奖励
-    # extract the used quantities (to enable type-hinting)
-    robot: RigidObject = env.scene[robot_cfg.name]
+    """Reward the agent for tracking the goal pose with the TARGET object."""
+    robot: Articulation = env.scene[robot_cfg.name]
     command = env.command_manager.get_command(command_name)
-    # compute the desired position in the world frame
+
+    # 计算目标位置
     des_pos_b = command[:, :3]
     des_pos_w, _ = combine_frame_transforms(robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], des_pos_b)
-    # distance of the end-effector to the object: (num_envs,)
 
-    object1: RigidObject = env.scene["yellow_object"]
-    object2: RigidObject = env.scene["green_object"]
-    object3: RigidObject = env.scene["red_object"]
-    distance1 = torch.norm(des_pos_w - object1.data.root_pos_w[:, :3], dim=1)
-    distance2 = torch.norm(des_pos_w - object2.data.root_pos_w[:, :3], dim=1)
-    distance3 = torch.norm(des_pos_w - object3.data.root_pos_w[:, :3], dim=1)
-    # rewarded if the object is lifted above the threshold
-    r1 = (object1.data.root_pos_w[:, 2] > minimal_height) * (1 - torch.tanh(distance1 / std))  # torch.Size([num_env])
-    r2 = (object2.data.root_pos_w[:, 2] > minimal_height) * (1 - torch.tanh(distance2 / std))
-    r3 = (object3.data.root_pos_w[:, 2] > minimal_height) * (1 - torch.tanh(distance3 / std))
-    current_target_idx = env.current_target_ids_per_env  # torch.Size([num_env])
+    # 1. 获取所有物体的引用
+    objects = [env.scene[name] for name in PREDEFINED_TARGETS]
+    # 2. 计算每个物体到目标位置的距离奖励，并乘以“是否被举起”的条件
+    per_object_goal_rewards = [
+        (obj.data.root_pos_w[:, 2] > minimal_height)
+        * (1 - torch.tanh(torch.norm(des_pos_w - obj.data.root_pos_w[:, :3], dim=1) / std))
+        for obj in objects
+    ]
 
-    mapping_vectors = torch.tensor(
-        [  # target序号为0，代表目标为yellow cube，。。。
-            [1.0, 1.0, 1.0],  # 对应输入 0
-            [1.0, 1.0, 1.0],  # 对应输入 1
-            [1.0, 1.0, 1.0],  # 对应输入 2
-        ],
-        device=env.device,
-    )
-    if current_target_idx.dtype != torch.long:
-        current_target_idx = current_target_idx.long()
-    else:
-        current_target_idx = current_target_idx
-    weight_tensor = mapping_vectors[current_target_idx]
-    r_div = torch.stack([r1, r2, r3], dim=1)
-    r_div = torch.mul(weight_tensor, r_div)
-    r, i = r_div.max(dim=1, keepdim=False)
-    r = r1  # 只需要黄色物体
+    # 3. 堆叠
+    all_rewards = torch.stack(per_object_goal_rewards, dim=1)
 
-    distance1 = torch.norm(des_pos_w - object1.data.root_pos_w[:, :3], dim=1).mean()
-    env.extras["ee_object_distance"] = distance1
+    # 4. 获取目标ID
+    target_ids = env.current_target_ids_per_env.long()
 
-    return r  # shape:(n)
+    # 5. 【核心】使用 gather 选择目标物体的奖励
+    target_specific_reward = torch.gather(all_rewards, 1, target_ids.unsqueeze(-1)).squeeze(-1)
+
+    # 6. 监控（可选）
+    # 使用 all_rewards 可以监控智能体是否在错误地移动非目标物体
+    # non_target_mask = torch.ones_like(all_rewards, dtype=torch.bool)
+    # non_target_mask.scatter_(1, target_ids.unsqueeze(-1), False)
+    # env.extras["goal_distance_reward/non_target_mean"] = all_rewards[non_target_mask].mean()
+
+    return target_specific_reward
 
 
 def my_action_rate_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
@@ -229,9 +199,9 @@ def touch_object(
     # End-effector position: (num_envs, 3)
     ee_w = ee_frame.data.target_pos_w[..., 0, :]
 
-    object1: RigidObject = env.scene["yellow_object"]
-    object2: RigidObject = env.scene["green_object"]
-    object3: RigidObject = env.scene["red_object"]
+    object1: RigidObject = env.scene["yellow_cube"]
+    object2: RigidObject = env.scene["green_cube"]
+    object3: RigidObject = env.scene["red_cube"]
     # Target object position: (num_envs, 3)
     object1_pos_w = object1.data.root_pos_w
     object2_pos_w = object2.data.root_pos_w
@@ -271,9 +241,9 @@ def touch_object(
 def lift_ratio_obs(env: LiftEnv, object_cfg: SceneEntityCfg = SceneEntityCfg("object")) -> torch.Tensor:
     """Reward the agent for lifting the object above the minimal height."""
 
-    object1: RigidObject = env.scene["yellow_object"]
-    object2: RigidObject = env.scene["green_object"]
-    object3: RigidObject = env.scene["red_object"]
+    object1: RigidObject = env.scene["yellow_cube"]
+    object2: RigidObject = env.scene["green_cube"]
+    object3: RigidObject = env.scene["red_cube"]
     minimal_height = 0.05
 
     r1 = torch.where(object1.data.root_pos_w[:, 2] > minimal_height, 1.0, 0.0)

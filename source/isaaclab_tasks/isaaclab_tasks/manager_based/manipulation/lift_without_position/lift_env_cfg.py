@@ -46,9 +46,9 @@ class ObjectTableSceneCfg(InteractiveSceneCfg):
     # target object: will be populated by agent env cfg
     # object: RigidObjectCfg | DeformableObjectCfg = MISSING
 
-    green_object: RigidObjectCfg | DeformableObjectCfg = MISSING
-    red_object: RigidObjectCfg | DeformableObjectCfg = MISSING
-    yellow_object: RigidObjectCfg | DeformableObjectCfg = MISSING
+    green_cube: RigidObjectCfg | DeformableObjectCfg = MISSING
+    red_cube: RigidObjectCfg | DeformableObjectCfg = MISSING
+    yellow_cube: RigidObjectCfg | DeformableObjectCfg = MISSING
 
     # bottle: RigidObjectCfg | DeformableObjectCfg = MISSING
 
@@ -122,11 +122,13 @@ class ObservationsCfg:
             func=mdp.generated_commands, params={"command_name": "object_pose"}
         )  # target position
         actions = ObsTerm(func=mdp.last_action)
+        text_clip_feature = ObsTerm(func=mdp.text_feature_obs, noise=None, params={"debug": False})
 
+        ee_camera_orientation = ObsTerm(func=mdp.ee_camera_orientation_in_robot_root_frame)
         image_clip_feature = ObsTerm(func=mdp.image_feature_obs, noise=None)  # 使用新的观测函数名
-        text_clip_feature = ObsTerm(func=mdp.text_feature_obs, noise=None)
         depth_obs = ObsTerm(func=mdp.depth_obs, noise=None)
         rgb_feature = ObsTerm(func=mdp.rgb_feature)
+        # object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
 
         contact_force_left_finger = ObsTerm(
             func=mdp.get_finger_contact_forces,
@@ -138,16 +140,14 @@ class ObservationsCfg:
             noise=None,
             params={"sensor_cfg": SceneEntityCfg("right_finger_contactsensor")},
         )
-        object_position = ObsTerm(func=mdp.calcualte_object_pos_from_depth)
-        object_position_perfect = ObsTerm(
-            func=mdp.object_position_in_robot_root_frame, params={"object_cfg": SceneEntityCfg("yellow_object")}
-        )
+        object_position_perfect = ObsTerm(func=mdp.object_position_in_robot_root_frame)
 
         # ------- obs shape
         """
         joint_pos torch.Size([2, 9])
         joint_vel torch.Size([2, 9])
         ee_position torch.Size([2, 3])
+        ee_camera_orientation ([n,4])
         object_position torch.Size([2, 9])
         target_object_position torch.Size([2, 7])
         actions torch.Size([2, 8])
@@ -175,7 +175,7 @@ class EventCfg:
         params={
             "pose_range": {"x": (-0.1, 0.1), "y": (-0.15, 0.15), "z": (0.0, 0.0)},
             "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("yellow_object", body_names="Cube"),
+            "asset_cfg": SceneEntityCfg("yellow_cube", body_names="Cube"),
         },
     )
 
@@ -185,7 +185,7 @@ class EventCfg:
         params={
             "pose_range": {"x": (-0.15, 0.15), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
             "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("green_object", body_names="Cube"),
+            "asset_cfg": SceneEntityCfg("green_cube", body_names="Cube"),
         },
     )
 
@@ -195,7 +195,7 @@ class EventCfg:
         params={
             "pose_range": {"x": (-0.15, 0.15), "y": (-0.25, 0.25), "z": (0.0, 0.0)},
             "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("red_object", body_names="Cube"),
+            "asset_cfg": SceneEntityCfg("red_cube", body_names="Cube"),
         },
     )
 
@@ -212,13 +212,13 @@ class EventCfg:
         # params: {} # 如果需要，可以传递参数，但 randomize_string_task_goal
         # 通常会作用于所有环境 (env_ids=None 效果)
     )
-
-    reset_database = EventTerm(
-        func=mdp.reset_database,
-        mode="reset",  # 确保它在环境重置时被调用
-        # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
-        # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
-    )
+    # camera模式用到
+    # reset_database = EventTerm(
+    #     func=mdp.reset_database,
+    #     mode="reset",  # 确保它在环境重置时被调用
+    #     # params: {} # 如果 randomize_string_task_goal 需要额外参数，可以在这里提供
+    #     # 但在这个设计中，它直接从 env 实例和预定义列表获取信息
+    # )
 
     # reset_bottle_position = EventTerm(
     #     func=mdp.reset_root_state_uniform,
@@ -289,16 +289,16 @@ class TerminationsCfg:
 
     yellow_object_dropping = DoneTerm(
         func=mdp.root_height_below_minimum,
-        params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("yellow_object")},
+        params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("yellow_cube")},
     )
 
-    # green_object_dropping = DoneTerm(
-    #     func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("green_object")}
-    # )
+    green_object_dropping = DoneTerm(
+        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("green_cube")}
+    )
 
-    # red_object_dropping = DoneTerm(
-    #     func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("red_object")}
-    # )
+    red_object_dropping = DoneTerm(
+        func=mdp.root_height_below_minimum, params={"minimum_height": -0.05, "asset_cfg": SceneEntityCfg("red_cube")}
+    )
 
 
 # @configclass

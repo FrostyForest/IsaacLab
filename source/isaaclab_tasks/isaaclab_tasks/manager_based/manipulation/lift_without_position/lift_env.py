@@ -25,13 +25,12 @@ class LiftEnv(ManagerBasedRLEnv):
     # cfg: MyCustomLiftEnvCfg # 类型提示，指向你的配置类
 
     def __init__(self, cfg: LiftEnvCfg, **kwargs):  # : MyCustomLiftEnvCfg # 接收配置实例,
-
         # 在这里初始化你的自定义运行时状态变量
         # 暂时先设置环境数量和设备，先初始化环境变量，防止之后初始化顺序问题
         _num_envs = cfg.scene.num_envs  # 假设 cfg.scene.num_envs 总是可用的
         _device = cfg.sim.device  # 假设 cfg.sim.device 总是可用的
         self.feature_dim = 768
-        self.current_target_ids_per_env = torch.full((_num_envs,), -1, dtype=torch.long, device=_device)
+        self.current_target_ids_per_env = torch.full((_num_envs,), 0, dtype=torch.long, device=_device)
         self.encoded_task_goal_per_env = torch.zeros(
             _num_envs, NUM_TARGETS, dtype=torch.float32, device=_device  # 假设是 one-hot 编码
         )
@@ -48,10 +47,10 @@ class LiftEnv(ManagerBasedRLEnv):
         self.text_processor = AutoTokenizer.from_pretrained(self.clip_path, device_map="auto")
 
         # 根据深度信息计算位置需要启用一下模型
-        self.sam_model = FastSAM("/home/linhai/code/IsaacLab/my_code/fast_sam/FastSAM-x.pt")  # 确保路径正确
-        settings = Settings(anonymized_telemetry=False)
-        self.client = chromadb.Client(settings=settings)
-        self.collection = self.client.get_or_create_collection(name="robot_seen_objects")
+        # self.sam_model = FastSAM("/home/linhai/code/IsaacLab/my_code/fast_sam/FastSAM-x.pt")  # 确保路径正确
+        # settings = Settings(anonymized_telemetry=False)
+        # self.client = chromadb.Client(settings=settings)
+        # self.collection = self.client.get_or_create_collection(name="robot_seen_objects")
 
         self.rgb_extractor = timm.create_model("efficientnet_b0", pretrained=False, num_classes=0)
         self.rgb_processor = self._rgb_processor()

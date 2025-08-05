@@ -48,7 +48,9 @@ from isaaclab_tasks.utils import parse_env_cfg
 import pprint
 
 # from models.model_without_image_distilling import Shared as model_without_img
-# from models.model_without_image import Shared as model_without_img
+from models.model_without_image import Shared as model_without_img
+from models.model_without_image_with_preprocessor import Shared as model_without_img_with_preprocessor
+
 # from models.model_with_image import Shared as model_with_img
 from models.model_with_image import Shared as policy_model_teacher
 from models.value_model_with_image import Shared as value_model_teacher
@@ -76,20 +78,27 @@ def main():
     env = gym.make(args_cli.task, cfg=env_cfg)
     env = wrap_env(env)
     device = env.device
-
-    # cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
-    cfg["state_preprocessor"] = None
-    if cfg["state_preprocessor"] is not None:
-        state_preprocessor = cfg["state_preprocessor"](**cfg["state_preprocessor_kwargs"])
-    else:
-        state_preprocessor = None
-
+    is_teacher_model_without_image = True
     teacher_model_path = (
-        "runs/torch/Isaac-my_Lift-Cube-Franka-v1/25-07-28_01-17-11-597165_my_PPO_rank/checkpoints/best_agent.pt"
+        "runs/distillation_learning/distillation_Isaac-my_Lift-Cube-Franka-v1_Jul30_15-43-46/checkpoints/best_model.pt"
     )
 
     state_dict = torch.load(teacher_model_path, map_location=device)
-    teacher_model_policy = Model(env.observation_space, env.action_space, device, perfect_position=True)
+
+    # cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
+
+    # if is_teacher_model_without_image:#新模型架构不需要外置的预处理器
+    #     cfg["state_preprocessor"] = RunningStandardScaler
+    #     cfg["state_preprocessor_kwargs"] = {"size": env.observation_space, "device": device}
+    #     state_preprocessor = cfg["state_preprocessor"](**cfg["state_preprocessor_kwargs"])
+    #     state_preprocessor.load_state_dict(state_dict["state_preprocessor"])
+    # else:
+    #     state_preprocessor = None
+
+    teacher_model_policy = model_without_img_with_preprocessor(env.observation_space, env.action_space, device).to(
+        device
+    )
+    state_preprocessor = None  # 新模型架构不需要外置的预处理器
     teacher_model_policy.load_state_dict(state_dict["policy"])
     teacher_model_policy = teacher_model_policy.eval().to(device)
 
@@ -102,7 +111,11 @@ def main():
     teacher_value_preprocessor = teacher_value_preprocessor.eval()
 
     # student_model_path='runs/distillation_learning/distillation_Isaac-my_Lift-Cube-Franka-v1_Jul13_16-23-00/checkpoints/best_model.pt'
-    student_model = Model(env.observation_space, env.action_space, device, perfect_position=False).to(device)
+    student_model = Model(
+        env.observation_space, env.action_space, device, perfect_position=True, no_object_position=True
+    ).to(
+        device
+    )  # 当启用perfect_position的时候需要启用no_object_position
     # state_dict = torch.load(student_model_path, map_location=device)
     # student_model.load_state_dict(state_dict["policy"]).to(device)
     student_value_preprocessor = RunningStandardScaler(size=1, device=device)
@@ -137,7 +150,7 @@ def main():
     batch_student_values = []  # <--- 新增
     batch_teacher_values = []  # <--- 新增
     batch_observations = []  # <--- 新增: 我们需要保存观测值来进行价值预测
-
+    huber_loss_fn = torch.nn.HuberLoss(delta=0.05)
     pbar = tqdm(total=12000, desc="Distillation Training")
     # simulate environment
     while simulation_app.is_running():
@@ -189,8 +202,8 @@ def main():
             with torch.no_grad():
                 next_observations, reward, terminated, truncated, info = env.step(student_actions.detach())
                 if global_step % 10 == 0:
-                    writer.add_scalar("task metrics/lift ratio", info["lift_ratio"].item(), global_step)
-                lift_ratios_over_interval.append(info["lift_ratio"].item())
+                    writer.add_scalar("task metrics/lift ratio", info["lift_ratio"], global_step)
+                lift_ratios_over_interval.append(info["lift_ratio"])
                 observations = next_observations
                 if terminated.any() or truncated.any():
                     observations, _ = env.reset()
@@ -250,10 +263,17 @@ def main():
             student_value_outputs = student_model.compute(
                 {"states": observations_tensor[permuted_indices]}, role="value"
             )
+            student_position_outputs = student_model.compute(
+                {"states": observations_tensor[permuted_indices]}, role="position"
+            )
 
             current_student_mean = student_policy_metadata[0]
             current_student_log_std = student_policy_metadata[1].unsqueeze(0).expand(current_student_mean.shape[0], -1)
             current_student_value = student_value_outputs[0]
+            predict_positions = student_position_outputs[0]
+            predict_pos_dif = student_position_outputs[1]
+            real_object_positions = student_position_outputs[2]
+            real_ee_positions = student_position_outputs[3]
 
             # 创建分布
             student_dist = D.Normal(current_student_mean, current_student_log_std.exp())
@@ -273,11 +293,21 @@ def main():
             #         将教师的输出反标准化，与学生模型的原始输出比较。后者更直接。
             value_distillation_loss = F.mse_loss(current_student_value, teacher_values_tensor[permuted_indices])
 
+            position_loss = F.mse_loss(predict_positions, real_object_positions)
+            pos_dif_loss = F.mse_loss(predict_pos_dif, real_ee_positions - real_object_positions)
+
             # 3. **新增**: 加权求和得到总损失
             # 你可以引入权重来平衡两个损失
             policy_loss_weight = 1.0
             value_loss_weight = 0.5  # 价值损失的权重通常设置得比策略损失小
-            total_loss = (policy_loss_weight * policy_distillation_loss) + (value_loss_weight * value_distillation_loss)
+            position_loss_weight = 1.0
+            pos_dif_loss_weight = 1.0
+            total_loss = (
+                (policy_loss_weight * policy_distillation_loss)
+                + (value_loss_weight * value_distillation_loss)
+                + position_loss * position_loss_weight
+                + pos_dif_loss * pos_dif_loss_weight
+            )
 
             # 优化学生模型
             student_optimizer.zero_grad()
@@ -288,6 +318,8 @@ def main():
             writer.add_scalar("Loss/Total", total_loss.item(), global_step + i)
             writer.add_scalar("Loss/Policy_Distillation (KL)", policy_distillation_loss.item(), global_step + i)
             writer.add_scalar("Loss/Value_Distillation (MSE)", value_distillation_loss.item(), global_step + i)
+            writer.add_scalar("Loss/Position_Distillation (MSE)", position_loss.item(), global_step + i)
+            writer.add_scalar("Loss/Position_Dif_Loss (MSE)", pos_dif_loss.item(), global_step + i)
 
         # Clear the batch data lists for the next collection phase
         batch_student_means.clear()

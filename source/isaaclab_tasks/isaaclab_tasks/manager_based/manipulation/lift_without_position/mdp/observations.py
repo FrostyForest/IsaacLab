@@ -34,17 +34,48 @@ import json
 def object_position_in_robot_root_frame(
     env: ManagerBasedRLEnv,
     robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
 ) -> torch.Tensor:
-    """The position of the object in the robot's root frame."""
+    """
+    The position of the CURRENT TARGET object in the robot's root frame.
+
+    This function dynamically identifies the target object for each environment
+    based on the `env.current_target_ids_per_env` state and returns its position.
+    """
+    # 1. 定义一个与你的任务ID对应的、有序的物体名称列表
+    #    这个顺序必须与你的 ID_TO_TARGET 字典中的 ID (0, 1, 2...) 严格对应。
+    potential_target_names = PREDEFINED_TARGETS  # ["yellow_object", "green_object", "red_object"]
+
+    # 2. 从场景中获取所有潜在目标物体的引用
+    potential_targets = [env.scene[name] for name in potential_target_names]
+
+    # 3. 提取并堆叠所有潜在目标物体的世界坐标位置
+    #    - 每个 obj.data.root_pos_w[:, :3] 的形状是 (num_envs, 3)
+    #    - all_objects_pos_w 的形状将是 (num_envs, num_targets, 3)
+    all_objects_pos_w = torch.stack([obj.data.root_pos_w[:, :3] for obj in potential_targets], dim=1)
+
+    # 4. 获取当前每个环境的目标ID
+    #    形状: (num_envs,)
+    target_ids = env.current_target_ids_per_env.long()
+
+    # 5. 【核心】使用 gather 根据目标ID为每个环境选择正确的目标物体位置
+    #    - 我们需要将 target_ids 的形状调整为 (num_envs, 1, 1) 以便在 dim=1 上进行索引，
+    #      并能正确地广播到位置向量的最后一个维度 (3)。
+    #    - index_shape: (num_envs, 1, 3)
+    #    - all_objects_pos_w: (num_envs, num_targets, 3)
+    #    - gather 会沿着 dim=1 (物体维度) 进行索引。
+    index = target_ids.view(-1, 1, 1).expand(-1, 1, 3)
+    #    target_pos_w 的形状将是 (num_envs, 1, 3)
+    target_pos_w = torch.gather(all_objects_pos_w, 1, index)
+    #    压缩掉中间的维度，得到 (num_envs, 3)
+    target_pos_w = target_pos_w.squeeze(1)
+
+    # 6. 将选择出的目标物体世界坐标，转换到机器人基座坐标系
     robot: RigidObject = env.scene[robot_cfg.name]
-    object: RigidObject = env.scene[object_cfg.name]
-    object_pos_w = object.data.root_pos_w[:, :3]
-    object_pos_b, _ = subtract_frame_transforms(
-        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], object_pos_w
+    target_pos_b, _ = subtract_frame_transforms(
+        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], target_pos_w
     )
-    # print(object_cfg.name, object_pos_b)
-    return object_pos_b
+
+    return target_pos_b
 
 
 def ee_position_in_robot_root_frame(
@@ -57,6 +88,20 @@ def ee_position_in_robot_root_frame(
     ee_pos_w = ee_frame.data.target_pos_w[..., 0, :]
     ee_pos_b, _ = subtract_frame_transforms(robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], ee_pos_w)
     return ee_pos_b
+
+
+def ee_camera_orientation_in_robot_root_frame(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    robot: RigidObject = env.scene[robot_cfg.name]
+    camera = env.scene["camera_1"]
+    camera_pos_w = camera.data.pos_w[:, :3]
+    camera_rot_w = camera.data.quat_w_ros
+    camera_pos_b, camera_rot_b = subtract_frame_transforms(
+        robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], camera_pos_w, camera_rot_w
+    )
+    return camera_rot_b
 
 
 @torch.no_grad()
@@ -128,9 +173,11 @@ def depth_obs(env: LiftEnv) -> torch.Tensor:
 
 
 @torch.no_grad()
-def text_feature_obs(env: LiftEnv) -> torch.Tensor:
+def text_feature_obs(env: LiftEnv, debug=False) -> torch.Tensor:
     if hasattr(env, "current_target_state_per_env") and env.encoded_task_goal_per_env is not None:
         text_list = env.current_target_strings_per_env
+        if debug == True:
+            print(text_list)
         return env.current_target_state_per_env.float()
         # return env.current_target_ids_per_env.unsqueeze(-1)
     else:
@@ -154,9 +201,9 @@ def text_feature_obs(env: LiftEnv) -> torch.Tensor:
 
 
 def get_cubes_position(env: LiftEnv) -> torch.Tensor:
-    yellow_cube_pos = object_position_in_robot_root_frame(env, object_cfg=SceneEntityCfg("yellow_object")).squeeze(-1)
-    green_cube_pos = object_position_in_robot_root_frame(env, object_cfg=SceneEntityCfg("green_object")).squeeze(-1)
-    red_cube_pos = object_position_in_robot_root_frame(env, object_cfg=SceneEntityCfg("red_object")).squeeze(-1)
+    yellow_cube_pos = object_position_in_robot_root_frame(env, object_cfg=SceneEntityCfg("yellow_cube")).squeeze(-1)
+    green_cube_pos = object_position_in_robot_root_frame(env, object_cfg=SceneEntityCfg("green_cube")).squeeze(-1)
+    red_cube_pos = object_position_in_robot_root_frame(env, object_cfg=SceneEntityCfg("red_cube")).squeeze(-1)
 
     pos_tensor = torch.cat([yellow_cube_pos, green_cube_pos, red_cube_pos], dim=1)  # (n,9)
 
@@ -448,8 +495,8 @@ def rgb_feature(env: LiftEnv):
     raw_image_data2 = image(env, sensor_cfg=SceneEntityCfg("camera_2"), data_type="rgb", normalize=False).permute(
         0, 3, 1, 2
     )
-    input_tensor = env.rgb_processor(torch.cat([raw_image_data1, raw_image_data2], dim=0))
-
+    input_tensor = env.rgb_processor(torch.cat([raw_image_data1, raw_image_data2], dim=0))  # [2n, 3, 224, 224]
+    # print('rgb data shape',input_tensor.shape)
     # ----------------- 3. 提取特征 -----------------
     # 使用 torch.no_grad() 来禁用梯度计算，节省内存和计算资源
     with torch.no_grad():

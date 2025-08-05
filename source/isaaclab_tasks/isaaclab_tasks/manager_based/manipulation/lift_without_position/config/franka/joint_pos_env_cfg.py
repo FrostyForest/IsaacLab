@@ -65,7 +65,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
         #     ),
         # )
 
-        self.scene.green_object = RigidObjectCfg(
+        self.scene.green_cube = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/GreenCube",
             init_state=RigidObjectCfg.InitialStateCfg(pos=[0.45, 0.1, 0.055], rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(
@@ -84,7 +84,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
             ),
         )
 
-        self.scene.red_object = RigidObjectCfg(
+        self.scene.red_cube = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/RedCube",
             init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, -0.05, 0.055], rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(
@@ -102,7 +102,7 @@ class FrankaCubeLiftEnvCfg(LiftEnvCfg):
             ),
         )
 
-        self.scene.yellow_object = RigidObjectCfg(
+        self.scene.yellow_cube = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/YellowCube",
             init_state=RigidObjectCfg.InitialStateCfg(pos=[0.52, -0.1, 0.055], rot=[1, 0, 0, 0]),
             spawn=UsdFileCfg(

@@ -53,9 +53,9 @@ def randomize_string_task_goal(env: LiftEnv, env_ids: torch.Tensor):  # 类型�
         )
 
     env.current_target_ids_per_env[effective_env_ids] = sampled_indices
-    env.encoded_task_goal_per_env[effective_env_ids] = torch.nn.functional.one_hot(
-        sampled_indices, num_classes=NUM_TARGETS
-    ).float()
+    # env.encoded_task_goal_per_env[effective_env_ids] = torch.nn.functional.one_hot(
+    #     sampled_indices, num_classes=NUM_TARGETS
+    # ).float()
 
     for i, env_idx in enumerate(effective_env_ids.tolist()):
         env.current_target_strings_per_env[env_idx] = ID_TO_TARGET[sampled_indices[i].item()]
