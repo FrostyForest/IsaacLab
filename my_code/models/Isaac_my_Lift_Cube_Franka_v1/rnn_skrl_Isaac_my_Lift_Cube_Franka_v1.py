@@ -14,7 +14,7 @@ sys.path.append(str(project_root))
 from my_code.models import utils
 
 # 为了可运行性，我们用 skrl 自带的 scaler
-from skrl.resources.preprocessors.torch import RunningStandardScaler as my_RunningStandardScaler
+from my_code.models.my_running_standard_scaler import my_RunningStandardScaler
 
 
 class SharedRNN(GaussianMixin, DeterministicMixin, Model):
@@ -37,6 +37,7 @@ class SharedRNN(GaussianMixin, DeterministicMixin, Model):
         no_object_position=False,
         rnn_hidden_size=256,  # 替换 d_model
         rnn_num_layers=1,  # 新增 RNN 层数参数
+        single_step=False,
     ):
         # 1. 初始化基类
         Model.__init__(self, observation_space, action_space, device)
@@ -49,7 +50,7 @@ class SharedRNN(GaussianMixin, DeterministicMixin, Model):
         self.no_object_position = no_object_position
         self.hidden_size = rnn_hidden_size
         self.num_layers = rnn_num_layers
-
+        self.single_step = single_step
         # --- 特征提取器部分 (保持不变) ---
         self.dim_state_net1 = 48
         self.dim_state_net2 = 64
@@ -196,7 +197,7 @@ class SharedRNN(GaussianMixin, DeterministicMixin, Model):
         rnn_input = self._extract_and_combine_features(states)  # (N*L or N, rnn_hidden_size)
 
         # --- 步骤 3: 通过 RNN 运行序列 ---
-        if self.training:
+        if self.training and self.single_step == False:
             # --- 修正开始 ---
             # batch_size_in_training 应该是指 mini-batch 中序列的数量，而不是总的 transition 数量
             num_transitions = rnn_input.shape[0]

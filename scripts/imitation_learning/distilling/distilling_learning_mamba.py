@@ -7,6 +7,7 @@ using Truncated Backpropagation Through Time (TBPTT) to learn temporal dependenc
 import sys
 import os
 
+os.environ["TRITON_F32_DEFAULT"] = "ieee"
 # 设置项目根目录路径
 project_root = os.path.abspath("/home/linhai/code/IsaacLab")
 if project_root not in sys.path:
@@ -40,7 +41,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 # 导入模型
 from my_code.models.Isaac_my_Lift_Cube_Franka_v1.mamba_skrl_Isaac_my_Lift_Cube_Franka_v1 import SharedMamba
-from my_code.models.Isaac_my_Lift_Cube_Franka_v1.rnn_skrl_Isaac_my_Lift_Cube_Franka_v1 import SharedRNN
+from my_code.models.Isaac_my_Lift_Cube_Franka_v1.mamba2_skrl_Isaac_my_Lift_Cube_Franka_v1 import SharedMamba2
 from my_code.models.model_without_image_with_preprocessor import Shared as TeacherModel  # 假设教师模型路径
 from skrl.envs.wrappers.torch import wrap_env
 
@@ -84,7 +85,7 @@ def main():
     #     no_object_position=True,
     #     single_step=True,
     # ).to(device)
-    student_model = SharedRNN(
+    student_model = SharedMamba2(
         env.observation_space,
         env.action_space,
         device,
@@ -92,8 +93,7 @@ def main():
         sequence_length=bptt_length,
         perfect_position=True,
         no_object_position=True,
-        rnn_num_layers=8,
-        rnn_hidden_size=512,
+        n_layers=6,
         single_step=True,
     ).to(device)
 
@@ -144,6 +144,7 @@ def main():
 
         for step_in_bptt in range(bptt_length):
             # 前向传播 (保持在计算图中)
+
             student_input = {"states": observations, "rnn": [student_cache]}
             policy_meta = student_model.compute(student_input, role="policy")
             value_meta = student_model.compute(student_input, role="value")
