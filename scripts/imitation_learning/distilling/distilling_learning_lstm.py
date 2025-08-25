@@ -76,7 +76,7 @@ def main():
     bptt_length = 15  # 定义 BPTT 的序列长度
     print(f"[INFO] Initializing student Mamba model with BPTT length: {bptt_length}")
 
-    student_model = SharedRNN(
+    student_model = SharedLSTM(
         env.observation_space,
         env.action_space,
         device,
@@ -84,8 +84,8 @@ def main():
         sequence_length=bptt_length,
         perfect_position=True,
         no_object_position=True,
-        rnn_num_layers=8,
-        rnn_hidden_size=512,
+        lstm_num_layers=6,
+        lstm_hidden_size=256,
         single_step=True,
     ).to(device)
 
@@ -113,8 +113,10 @@ def main():
 
     # 初始化学生模型的隐藏状态
     spec = student_model.get_specification()["rnn"]
-    cache_shapes = spec["sizes"]
-    student_cache = torch.zeros(cache_shapes[0], device=device)
+    # spec["sizes"] 是 [(h_shape), (c_shape)]
+    hidden_state_0 = torch.zeros(spec["sizes"][0], device=device)
+    cell_state_0 = torch.zeros(spec["sizes"][1], device=device)
+    student_caches = [hidden_state_0, cell_state_0]  # <--- 现在是一个列表
 
     # 权重因子
     policy_loss_weight = 1.0
@@ -132,11 +134,11 @@ def main():
         total_lift_ratio = 0.0
 
         # 将初始缓存从计算图中分离，作为本序列的起点
-        initial_cache_for_bptt = student_cache.detach()
+        initial_caches_for_bptt = [h.detach() for h in student_caches]
 
         for step_in_bptt in range(bptt_length):
             # 前向传播 (保持在计算图中)
-            student_input = {"states": observations, "rnn": [student_cache]}
+            student_input = {"states": observations, "rnn": student_caches}
             policy_meta = student_model.compute(student_input, role="policy")
             value_meta = student_model.compute(student_input, role="value")
 
@@ -165,11 +167,12 @@ def main():
                 observations = next_observations
                 total_lift_ratio += info["lift_ratio"]
                 # 更新隐藏状态 (保持在计算图中)
-                student_cache = new_cache_meta["rnn"][0]
+                student_caches = new_cache_meta["rnn"]
 
                 # 如果 episode 结束，重置状态 (乘以 (1-done) 以保持在计算图中)
                 done_mask = (terminated | truncated).view(1, -1, 1).float()
-                student_cache = student_cache * (1.0 - done_mask)
+                student_caches[0] = student_caches[0] * (1.0 - done_mask)
+                student_caches[1] = student_caches[1] * (1.0 - done_mask)
 
                 # --- 日志和进度条 ---
                 if "lift_ratio" in info:
@@ -193,7 +196,7 @@ def main():
         student_optimizer.step()
 
         # 将最终的缓存 detach，作为下一次 BPTT 序列的起点
-        student_cache = student_cache.detach()
+        student_caches = [h.detach() for h in student_caches]
 
         # --- 步骤 3: 记录和保存 ---
         if global_step % 20 == 0:  # 每 10 次 BPTT 记录一次

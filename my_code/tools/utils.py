@@ -3,6 +3,9 @@ import os
 from email.mime.text import MIMEText
 from email.header import Header
 from dotenv import load_dotenv
+import random
+import numpy as np
+import torch
 
 
 def send_email_notification(subject, content, receiver):
@@ -39,3 +42,11 @@ def send_email_notification(subject, content, receiver):
         print(f"[SUCCESS] Email notification sent successfully to {receiver}.")
     except Exception as e:
         print(f"[EMAIL ERROR] Failed to send email: {e}")
+
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
