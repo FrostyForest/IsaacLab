@@ -74,6 +74,7 @@ if train_with_img == True:
     models["policy"] = Shared(
         env.observation_space, env.action_space, device, perfect_position=True, no_object_position=True
     )
+
     models["value"] = models["policy"]
 else:
     from models.model_without_image import Shared

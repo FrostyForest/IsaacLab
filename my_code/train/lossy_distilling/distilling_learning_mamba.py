@@ -47,6 +47,7 @@ from my_code.models.Isaac_my_Lift_Cube_Franka_v1.mamba_restrict_skrl_Isaac_my_Li
 )
 from my_code.models.model_without_image_with_preprocessor import Shared as TeacherModel  # 假设教师模型路径
 from skrl.envs.wrappers.torch import wrap_env
+from my_code.tools.utils import set_seed
 
 
 def main():
@@ -59,6 +60,7 @@ def main():
     env = gym.make(args_cli.task, cfg=env_cfg)
     env = wrap_env(env)
     device = env.device
+    set_seed(21)
     print(f"[INFO] Using device: {device}")
     print(f"[INFO] Observation space: {env.observation_space}")
     print(f"[INFO] Action space: {env.action_space}")
@@ -72,23 +74,15 @@ def main():
     teacher_model_policy = TeacherModel(env.observation_space, env.action_space, device).to(device)
     teacher_model_policy.load_state_dict(state_dict["policy"])
     teacher_model_policy = teacher_model_policy.eval()
+    teacher_model_policy = torch.compile(teacher_model_policy, mode="reduce-overhead")
     teacher_model_value = teacher_model_policy
     print("[INFO] Teacher model loaded successfully.")
 
     # --- 学生模型实例化 ---
     bptt_length = 15  # 定义 BPTT 的序列长度
+    activate_mask_learning = False
     print(f"[INFO] Initializing student Mamba model with BPTT length: {bptt_length}")
-    # student_model = SharedMamba(
-    #     env.observation_space,
-    #     env.action_space,
-    #     device,
-    #     num_envs=env.num_envs,
-    #     sequence_length=bptt_length,
-    #     perfect_position=True,
-    #     no_object_position=True,
-    #     single_step=True,
-    # ).to(device)
-    student_model = mask_mamba(
+    student_model = SharedMamba(
         env.observation_space,
         env.action_space,
         device,
@@ -96,9 +90,23 @@ def main():
         sequence_length=bptt_length,
         perfect_position=True,
         no_object_position=True,
-        n_layers=6,
         single_step=True,
+        activate_depth=False,
+        activate_contact_sensor=False,
     ).to(device)
+    student_model = torch.compile(student_model)
+    ###-------需要测试mask时候用mask mamba
+    # student_model = mask_mamba(
+    #     env.observation_space,
+    #     env.action_space,
+    #     device,
+    #     num_envs=env.num_envs,
+    #     sequence_length=bptt_length,
+    #     perfect_position=True,
+    #     no_object_position=True,
+    #     n_layers=6,
+    #     single_step=True,
+    # ).to(device)
 
     student_model_path = (
         "runs/distillation_learning/bptt_distill_Isaac-my_Lift-Cube-Franka-v1_Aug05_18-11-02/checkpoints/best_model.pt"

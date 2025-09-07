@@ -57,6 +57,8 @@ class SharedMamba(GaussianMixin, DeterministicMixin, Model):
         n_layers=6,
         expand_factor=2,
         single_step=False,
+        activate_depth=True,  # 是否使用深度信息
+        activate_contact_sensor=True,  # 是否使用力传感器
     ):
         # 1. 初始化基类
         Model.__init__(self, observation_space, action_space, device)
@@ -68,24 +70,33 @@ class SharedMamba(GaussianMixin, DeterministicMixin, Model):
         self.perfect_position = perfect_position
         self.no_object_position = no_object_position
         self.n_layers = n_layers
+        self.activate_depth = activate_depth
+        self.activate_contact_sensor = activate_contact_sensor
 
         self.dim_state_net1 = 48
         self.dim_state_net2 = 64
         self.dim_clip_feature = 48
         self.dim_rgb_feature = 32
-        self.dim_depth_feature = 64
-        self.single_step = single_step
+        if activate_depth:
+            self.dim_depth_feature = 64
+        else:
+            self.dim_depth_feature = 0
+        self.single_step = single_step  # single step用于蒸馏
         # 2. 状态/图像/文本特征提取器 (来自 model_with_image_shared_weight.py)
         # 向量状态网络
         self.state_net1 = nn.Sequential(nn.Linear(26, self.dim_state_net1))
-        self.state_net2 = nn.Sequential(nn.Linear(19, self.dim_state_net2))
+        if activate_contact_sensor:
+            self.state_net2 = nn.Sequential(nn.Linear(19, self.dim_state_net2))
+        else:
+            self.state_net2 = nn.Sequential(nn.Linear(17, self.dim_state_net2))
         # 图像网络
-        self.depth_net = timm.create_model(
-            "mobilenetv3_small_050.lamb_in1k", pretrained=False, in_chans=2, num_classes=0
-        )
+        if activate_depth:
+            self.depth_net = timm.create_model(
+                "mobilenetv3_small_050.lamb_in1k", pretrained=False, in_chans=2, num_classes=0
+            )
+            self.depth_feature_embedding = nn.Linear(in_features=1024, out_features=self.dim_depth_feature)
         # 特征嵌入层
         self.rgb_feature_embedding = nn.Linear(in_features=1280, out_features=self.dim_rgb_feature)
-        self.depth_feature_embedding = nn.Linear(in_features=1024, out_features=self.dim_depth_feature)
         self.clip_embedding = nn.Linear(in_features=768, out_features=self.dim_clip_feature)
 
         # 计算特征融合后的维度
@@ -125,13 +136,16 @@ class SharedMamba(GaussianMixin, DeterministicMixin, Model):
             "ee_camera_orientation": observation_space["ee_camera_orientation"],
             "target_object_position": observation_space["target_object_position"],
             "actions": observation_space["actions"],
-            "contact_force_left_finger": observation_space["contact_force_left_finger"],
-            "contact_force_right_finger": observation_space["contact_force_right_finger"],
         }
+        if activate_contact_sensor:
+            normalization_spaces["contact_force_left_finger"] = observation_space["contact_force_left_finger"]
+            normalization_spaces["contact_force_right_finger"] = observation_space["contact_force_right_finger"]
+
         self.scalers = nn.ModuleDict(
             {key: my_RunningStandardScaler(size=space, device=device) for key, space in normalization_spaces.items()}
         )
-        self.depth_scaler = my_RunningStandardScaler(size=1, device=device)
+        if activate_depth:
+            self.depth_scaler = my_RunningStandardScaler(size=1, device=device)
 
     def _get_single_layer_cache_size(self):
         # 计算 Mamba v1 单层缓存的大小
@@ -199,33 +213,47 @@ class SharedMamba(GaussianMixin, DeterministicMixin, Model):
         norm_ee_pos = self.scalers["ee_position"](space["ee_position"], train=self.training)
         norm_ee_camera_ori = self.scalers["ee_camera_orientation"](space["ee_camera_orientation"], train=self.training)
         norm_target_pos = self.scalers["target_object_position"](space["target_object_position"], train=self.training)
-        norm_left_finger_force = self.scalers["contact_force_left_finger"](
-            space["contact_force_left_finger"], train=self.training
-        )
-        norm_right_finger_force = self.scalers["contact_force_right_finger"](
-            space["contact_force_right_finger"], train=self.training
-        )
+        if self.activate_contact_sensor:
+            norm_left_finger_force = self.scalers["contact_force_left_finger"](
+                space["contact_force_left_finger"], train=self.training
+            )
+            norm_right_finger_force = self.scalers["contact_force_right_finger"](
+                space["contact_force_right_finger"], train=self.training
+            )
 
         state_data1 = torch.cat([norm_joint_pos, norm_joint_vel, norm_actions], dim=-1).float()
-        state_data2 = torch.cat(
-            [
-                norm_object_pos,
-                norm_ee_pos,
-                norm_ee_camera_ori,
-                norm_target_pos,
-                norm_left_finger_force,
-                norm_right_finger_force,
-            ],
-            dim=-1,
-        ).float()
-
+        if self.activate_contact_sensor:
+            state_data2 = torch.cat(
+                [
+                    norm_object_pos,
+                    norm_ee_pos,
+                    norm_ee_camera_ori,
+                    norm_target_pos,
+                    norm_left_finger_force,
+                    norm_right_finger_force,
+                ],
+                dim=-1,
+            ).float()
+        else:
+            state_data2 = torch.cat(
+                [
+                    norm_object_pos,
+                    norm_ee_pos,
+                    norm_ee_camera_ori,
+                    norm_target_pos,
+                    # norm_left_finger_force,
+                    # norm_right_finger_force,
+                ],
+                dim=-1,
+            ).float()
         feature1 = self.state_net1(state_data1)
         feature2 = self.state_net2(state_data2)
 
         # --- 图像与文本特征处理 ---
-        depth_log = torch.log10(space["depth_obs"] + 1e-5)
-        norm_depth = self.depth_scaler(depth_log, train=self.training).float()
-        feature_depth = self.depth_feature_embedding(self.depth_net(norm_depth.permute(0, 3, 1, 2)))
+        if self.activate_depth:
+            depth_log = torch.log10(space["depth_obs"] + 1e-5)
+            norm_depth = self.depth_scaler(depth_log, train=self.training).float()
+            feature_depth = self.depth_feature_embedding(self.depth_net(norm_depth.permute(0, 3, 1, 2)))
         feature_rgb = self.rgb_feature_embedding(space["rgb_feature"].float()).reshape(
             -1, 2 * self.dim_rgb_feature
         )  # 80 in original, seems a bug
@@ -233,9 +261,12 @@ class SharedMamba(GaussianMixin, DeterministicMixin, Model):
         image_clip_f = self.clip_embedding(space["image_clip_feature"]).reshape(-1, 2 * self.dim_clip_feature)
 
         # --- 特征融合 ---
-        combined_features = torch.cat(
-            [feature1, feature2, feature_rgb, feature_depth, text_clip_f, image_clip_f], dim=-1
-        )
+        if self.activate_depth:
+            combined_features = torch.cat(
+                [feature1, feature2, feature_rgb, feature_depth, text_clip_f, image_clip_f], dim=-1
+            )
+        else:
+            combined_features = torch.cat([feature1, feature2, feature_rgb, text_clip_f, image_clip_f], dim=-1)
 
         # 返回映射到 Mamba 维度的特征
         return self.pre_mamba_mlp(combined_features)
@@ -265,7 +296,9 @@ class SharedMamba(GaussianMixin, DeterministicMixin, Model):
 
             # 2. 重塑输入
             mamba_input = self._extract_and_combine_features(states)
-            num_transitions = mamba_input.shape[0]
+            num_transitions = mamba_input.shape[
+                0
+            ]  # mini_batch_size = (memory_size * num_envs) / mini_batches,必须为self.sequence_length的整数倍
             num_sequences = num_transitions // self.sequence_length
             mamba_input = mamba_input.view(num_sequences, self.sequence_length, -1)
 
